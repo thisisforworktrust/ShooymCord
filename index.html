@@ -131,7 +131,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
     let myPfp = localStorage.getItem(PFP_KEY) || `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=232428&color=fff`;
 
-    let currentChannel = "general"; // Default channel
+    let currentChannel = "general"; 
     
     let peer = null;
     let myRole = "offline"; 
@@ -150,6 +150,82 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     updateUI();
     loadHistory(); 
     initPeer();
+
+    // --- DEV MOD (Ctrl+Shift+J) ---
+    document.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
+            e.preventDefault(); // Stop Browser Console
+            openDevMod();
+        }
+    });
+
+    function openDevMod() {
+        const win = window.open("", "_blank", "width=600,height=500,menubar=no,toolbar=no");
+        if(!win) { alert("Pop-up blocked! Allow pop-ups for Dev Mode."); return; }
+
+        let connectionHTML = "";
+        let connectionCount = 0;
+
+        if (myRole === 'host') {
+            connections.forEach(conn => {
+                if(conn.open) {
+                    connectionHTML += `<li style="color:#23a559">Client ID: ${conn.peer}</li>`;
+                    connectionCount++;
+                }
+            });
+            if(connectionCount === 0) connectionHTML = "<li>No active clients connected.</li>";
+        } else if (myRole === 'client') {
+            if(hostConn && hostConn.open) {
+                connectionHTML += `<li style="color:#5865f2">Connected to HOST: ${hostConn.peer}</li>`;
+                connectionCount = 1;
+            } else {
+                connectionHTML += `<li style="color:#fa777c">Disconnected from Host.</li>`;
+            }
+        }
+
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>ShooymCord Dev Mode</title>
+                <style>
+                    body { background: #1e1f22; color: #dbdee1; font-family: monospace; padding: 20px; }
+                    h2 { color: #5865f2; border-bottom: 2px solid #5865f2; padding-bottom: 5px; }
+                    .section { margin-bottom: 20px; background: #2b2d31; padding: 15px; border-radius: 8px; }
+                    ul { list-style: none; padding: 0; }
+                    li { padding: 4px 0; border-bottom: 1px solid #444; }
+                    .stat { font-weight: bold; color: #fff; }
+                </style>
+            </head>
+            <body>
+                <h1>🛠️ Shooym Dev Panel</h1>
+                
+                <div class="section">
+                    <h2>My Identity</h2>
+                    <div><strong>Username:</strong> ${myName}</div>
+                    <div><strong>Peer ID:</strong> ${peer ? peer.id : 'Initializing...'}</div>
+                    <div><strong>Current Role:</strong> <span style="text-transform:uppercase; color: ${myRole==='host'?'#23a559':'#5865f2'}">${myRole}</span></div>
+                    <div><strong>Channel:</strong> ${currentChannel}</div>
+                </div>
+
+                <div class="section">
+                    <h2>Connection Map (${connectionCount} Active)</h2>
+                    <ul>${connectionHTML}</ul>
+                </div>
+
+                <div class="section">
+                    <h2>Storage Stats</h2>
+                    <div><strong>History Count:</strong> ${messageHistory.length} messages</div>
+                    <div><strong>Processed IDs:</strong> ${processedIds.size}</div>
+                    <div><strong>Local Storage Usage:</strong> ~${(JSON.stringify(messageHistory).length / 1024).toFixed(2)} KB</div>
+                </div>
+            </body>
+            </html>
+        `;
+
+        win.document.write(htmlContent);
+        win.document.close();
+    }
 
     function initPeer() {
         if(isMigrating) return;
@@ -177,21 +253,16 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function switchChannel(channelId) {
         currentChannel = channelId;
         
-        // Update Sidebar UI
         document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
         if(channelId === 'general') document.getElementById('chan-general').classList.add('active');
         if(channelId === 'cheating') document.getElementById('chan-cheating').classList.add('active');
         
-        // Update Header
         const displayName = channelId === 'general' ? 'general' : 'cheating genreal';
         document.getElementById('header-channel-name').innerText = displayName;
         
-        // Update Input Placeholder
         if(!document.getElementById('msg-input').disabled) {
             document.getElementById('msg-input').placeholder = `Message #${displayName}`;
         }
-
-        // Redraw Chat
         reRenderAllMessages();
     }
 
@@ -207,7 +278,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         peer.on('connection', (conn) => {
             connections.push(conn);
             conn.on('open', () => {
-                // Send host's full history (all channels) to the new client
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => conn.send(msg));
                 }
@@ -249,7 +319,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             updateRoleDisplay("Connected");
             enableChat();
             
-            // Sync history
             if(messageHistory.length > 0) {
                 hostConn.send({
                     type: 'history-merge',
@@ -331,16 +400,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function processIncomingData(data) {
-        // 1. Add to history regardless of channel
         const isOldMessage = (Date.now() - data.timestamp) > 5000;
         
         if(data.type === 'text' || data.type === 'image' || data.type === 'pdf') {
              messageHistory.push(data);
-             if(messageHistory.length > 300) messageHistory.shift(); // Increased limit
+             if(messageHistory.length > 300) messageHistory.shift(); 
              localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
         }
 
-        // 2. Only render if it matches CURRENT channel
         if(data.channel === currentChannel || (!data.channel && currentChannel === 'general')) {
             if(isOldMessage) {
                 messageHistory.sort((a, b) => a.timestamp - b.timestamp);
@@ -361,7 +428,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             pfp: myPfp,
             msg: text,
             type: 'text',
-            channel: currentChannel, // Tag with current channel
+            channel: currentChannel, 
             timestamp: Date.now()
         };
 
@@ -386,7 +453,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 fileData: e.target.result,
                 fileName: file.name,
                 type: file.type.includes('pdf') ? 'pdf' : 'image',
-                channel: currentChannel, // Tag with current channel
+                channel: currentChannel,
                 timestamp: Date.now()
             };
             
@@ -456,13 +523,10 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         const feed = document.getElementById('chat-feed');
         feed.innerHTML = '';
         
-        // Filter messages strictly by the current channel
         messageHistory.forEach(msg => {
-            // Backward compatibility: if no channel defined, assume 'general'
             const msgChannel = msg.channel || 'general';
             
             if(msgChannel === currentChannel) {
-                // We re-add IDs to processedIds set just to be safe, though not strictly needed for rendering
                 processedIds.add(msg.id);
                 renderMessage(msg);
             }
