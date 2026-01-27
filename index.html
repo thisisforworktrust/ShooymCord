@@ -59,7 +59,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 .role-host { background: var(--green); }
 .role-client { background: var(--accent); }
 .role-offline { background: var(--red); }
-/* Added Migrating Color */
 .role-migrating { background: #faa61a; color: black; } 
 
 /* Hidden Inputs */
@@ -115,7 +114,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <script>
     // --- CONFIGURATION ---
-    const SHARED_SERVER_ID = "shooym-global-room-v7"; 
+    const SHARED_SERVER_ID = "shooym-global-room-v7-stable"; 
     const STORAGE_KEY = "shooym_history_v7";
     const PFP_KEY = "shooym_pfp_v1";
 
@@ -137,8 +136,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
-    let heartbeatInterval = null; // Host sends these
-    let monitorInterval = null;   // Client checks these
+    let heartbeatInterval = null; 
+    let monitorInterval = null;   
 
     // --- INITIALIZATION ---
     updateUI();
@@ -148,7 +147,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function initPeer() {
         if(isMigrating) return;
         console.log("Initializing Peer...");
-        resetHeartbeats(); // Clear old timers
+        resetHeartbeats(); 
 
         // 1. Try to be HOST
         peer = new Peer(SHARED_SERVER_ID);
@@ -162,6 +161,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 console.log("Host exists. Switching to Client.");
                 becomeClient();
             } else {
+                // If it's a network error, wait and retry
                 setTimeout(initPeer, 3000);
             }
         });
@@ -173,10 +173,13 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         updateRoleDisplay("HOST (You)");
         enableChat();
         
+        // BUG FIX: clear old connections from previous sessions
+        connections = [];
+
         // START SENDING HEARTBEATS
         heartbeatInterval = setInterval(() => {
-            broadcast({ type: 'ping' }); // Silent ping
-        }, 2000); // Send every 2 seconds
+            broadcast({ type: 'ping' }); 
+        }, 2000); 
 
         peer.on('connection', (conn) => {
             connections.push(conn);
@@ -186,6 +189,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 }
             });
             conn.on('data', (data) => {
+                // Ignore pings from other confused hosts
+                if(data.type === 'ping') return;
+
                 if (isNewMessage(data.id)) {
                     processIncomingData(data);
                     broadcast(data);
@@ -196,7 +202,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function broadcast(data) {
-        connections.forEach(c => { if(c.open) c.send(data); });
+        // Filter out closed connections to prevent errors
+        connections = connections.filter(c => c.open);
+        connections.forEach(c => c.send(data));
     }
 
     // --- CLIENT LOGIC ---
@@ -216,13 +224,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             updateRoleDisplay("Connected");
             enableChat();
             
-            // START MONITORING HEARTBEATS
             lastHeartbeat = Date.now();
-            monitorInterval = setInterval(checkHeartbeat, 1000); // Check every second
+            monitorInterval = setInterval(checkHeartbeat, 1000); 
         });
 
         hostConn.on('data', (data) => {
-            // IF IT IS A PING, UPDATE TIMER AND STOP
             if(data.type === 'ping') {
                 lastHeartbeat = Date.now();
                 return;
@@ -233,7 +239,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             }
         });
 
-        // Backup close detection (PeerJS standard)
         hostConn.on('close', () => {
             console.log("Connection closed normally.");
             handleHostDisconnect();
@@ -242,12 +247,10 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         peer.on('error', () => handleHostDisconnect());
     }
 
-    // --- THE 5-SECOND RULE (HEARTBEAT CHECK) ---
+    // --- THE 5-SECOND RULE ---
     function checkHeartbeat() {
         const timeSinceLastPing = Date.now() - lastHeartbeat;
-        
         if (timeSinceLastPing > 5000) {
-            // It has been 5 seconds since last ping! Host is dead.
             console.warn("HEARTBEAT LOST! Host is unresponsive.");
             handleHostDisconnect();
         }
@@ -256,20 +259,18 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function handleHostDisconnect() {
         if(isMigrating) return;
         isMigrating = true;
-        resetHeartbeats(); // Stop checking
+        resetHeartbeats(); 
 
         updateRoleDisplay("Host Dead! Migrating...", "migrating");
         disableChat();
         
-        // Destroy old connection
         if(peer) peer.destroy();
         
-        // Random wait (1-3s) to prevent collision during race
         const delay = Math.floor(Math.random() * 2000) + 1000;
         
         setTimeout(() => {
             isMigrating = false;
-            initPeer(); // Restart, trying to be Host
+            initPeer(); 
         }, delay);
     }
 
