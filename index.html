@@ -97,7 +97,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <script>
     // --- CONFIGURATION ---
-    // Everyone uses this SAME ID. The first person to open the app "claims" it.
     const SHARED_SERVER_ID = "shooym-global-room-v3"; 
     const STORAGE_KEY = "shooym_universal_history_v1";
 
@@ -110,27 +109,25 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
     
     let peer = null;
-    let myRole = "offline"; // 'host' or 'client'
-    let connections = [];   // For Host: list of clients
-    let hostConn = null;    // For Client: link to host
+    let myRole = "offline"; 
+    let connections = [];   
+    let hostConn = null;    
     let messageHistory = [];
 
     // --- STARTUP ---
     updateUI(myName);
-    loadHistory(); // Load old messages from local storage immediately
+    loadHistory(); 
 
     // 1. Try to be the HOST first
     console.log("Attempting to become Host...");
     peer = new Peer(SHARED_SERVER_ID);
 
     peer.on('open', (id) => {
-        // If this runs, WE ARE THE HOST!
         becomeHost(id);
     });
 
     peer.on('error', (err) => {
         if(err.type === 'unavailable-id') {
-            // ID is taken, so a Host exists. WE BECOME A CLIENT.
             console.log("Host exists. Switching to Client mode.");
             becomeClient();
         } else {
@@ -144,23 +141,25 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         updateRoleDisplay("HOST (Server)");
         enableChat();
         
-        // Listen for clients joining
         peer.on('connection', (conn) => {
             connections.push(conn);
             
             conn.on('open', () => {
                 // Send history to the new person
-                // We send what we have in OUR storage
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => conn.send(msg));
                 }
             });
 
             conn.on('data', (data) => {
-                // 1. Save to MY storage
-                handleIncomingMessage(data);
-                // 2. Broadcast to everyone else
-                broadcast(data); 
+                // 1. Save to MY storage (and check for duplicates)
+                const isNew = handleIncomingMessage(data);
+                
+                // 2. Broadcast to everyone else ONLY if it was new to me
+                // (This prevents infinite loops of re-broadcasting old messages)
+                if (isNew) {
+                    broadcast(data); 
+                }
             });
 
             conn.on('close', () => {
@@ -170,7 +169,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function broadcast(data) {
-        // Send to all connected clients
         connections.forEach(c => {
             if(c.open) c.send(data);
         });
@@ -178,7 +176,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- CLIENT LOGIC ---
     function becomeClient() {
-        // Create a new peer with a random ID
         peer = new Peer(); 
         
         peer.on('open', () => {
@@ -203,39 +200,49 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         hostConn.on('close', () => {
             updateRoleDisplay("Host Disconnected");
             disableChat();
-            // Optional: Reload page to try to become new host?
-            // setTimeout(() => location.reload(), 3000); 
+            setTimeout(connectToHost, 3000); // Retry logic
         });
         
-        // If connection fails, retry (maybe host just closed)
         peer.on('error', (err) => {
-            console.log("Retrying connection...");
             setTimeout(connectToHost, 3000);
         });
     }
 
-    // --- UNIVERSAL CHAT LOGIC (Both Host & Client) ---
+    // --- MESSAGE HANDLING (THE FIX) ---
     
     function handleIncomingMessage(data) {
-        // Prevent duplicates (simple check by timestamp+user signature could be better, 
-        // but for now we rely on the fact that we append to end)
-        
-        // We add to history & Save
-        saveMessageToStorage(data);
+        // --- DUPLICATE CHECKER ---
+        // We check if we have a message with the same ID
+        // OR (for old messages) same timestamp + text
+        const exists = messageHistory.some(m => 
+            (m.id && m.id === data.id) || 
+            (!m.id && m.timestamp === data.timestamp && m.msg === data.msg)
+        );
+
+        if (exists) {
+            return false; // STOP! Do not render, do not save.
+        }
+
+        // If we get here, it is a NEW message
+        messageHistory.push(data);
+        saveToStorage();
         renderMessage(data);
+        return true; // Report success
     }
 
     function sendMessage() {
         const text = msgInput.value.trim();
         if (!text) return;
 
+        // CREATE MESSAGE WITH UNIQUE ID
         const msgData = {
+            id: Date.now().toString(36) + Math.random().toString(36).substr(2),
             user: myName,
             msg: text,
             timestamp: Date.now()
         };
 
-        // 1. Show & Save Locally immediately
+        // 1. Show & Save Locally
         handleIncomingMessage(msgData);
 
         // 2. Send over network
@@ -254,29 +261,17 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             const saved = localStorage.getItem(STORAGE_KEY);
             if(saved) {
                 messageHistory = JSON.parse(saved);
-                // Render all loaded messages
                 const feed = document.getElementById('chat-feed');
-                feed.innerHTML = ''; // Clear existing
+                feed.innerHTML = ''; 
                 messageHistory.forEach(msg => renderMessage(msg));
             }
         } catch(e) { console.error("Load error", e); }
     }
 
-    function saveMessageToStorage(data) {
-        // Check if message already exists (by simple content/time check to avoid duplication on re-sync)
-        // A simple way is to just push. Ideally, use unique IDs.
-        // For this simple version, we just push.
-        
-        // Avoid adding the exact same object reference if it's already there
-        const isDuplicate = messageHistory.some(m => m.timestamp === data.timestamp && m.user === data.user && m.msg === data.msg);
-        if(!isDuplicate) {
-            messageHistory.push(data);
-            
-            // Limit to 500 messages locally
-            if(messageHistory.length > 500) messageHistory.shift();
-            
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
-        }
+    function saveToStorage() {
+        // Limit to 500 messages
+        if(messageHistory.length > 500) messageHistory.shift();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
     }
 
     function clearMyHistory() {
@@ -305,7 +300,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function updateRoleDisplay(statusText) {
         const badge = document.getElementById('role-badge');
         badge.innerText = statusText;
-        badge.className = ""; // reset
+        badge.className = ""; 
         if(myRole === 'host') badge.classList.add('role-host');
         else if(statusText.includes("Connected")) badge.classList.add('role-client');
         else badge.classList.add('role-offline');
