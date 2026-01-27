@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShooymCord Hub</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+    :root {
+        --bg-primary: #313338;
+        --bg-secondary: #2b2d31;
+        --text-normal: #dbdee1;
+        --header-primary: #f2f3f5;
+        --accent: #5865f2;
+        --green: #23a559;
+        --button-hover: #4752c4;
+    }
+
+    body {
+        background-color: var(--bg-primary);
+        color: var(--text-normal);
+        font-family: 'gg sans', 'Noto Sans', Helvetica, Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+        text-align: center;
+    }
+
+    .container {
+        background-color: var(--bg-secondary);
+        padding: 40px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        max-width: 600px;
+        width: 90%;
+    }
+
+    h1 { color: var(--header-primary); margin-bottom: 10px; }
+    p { color: #b5bac1; line-height: 1.6; margin-bottom: 30px; }
+
+    .card-container {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+
+    .card {
+        background: #1e1f22;
+        padding: 20px;
+        border-radius: 8px;
+        width: 220px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        border: 1px solid #111;
+        transition: transform 0.2s;
+    }
+
+    .card:hover { transform: translateY(-5px); border-color: var(--accent); }
+
+    .icon { font-size: 3rem; margin-bottom: 15px; }
+
+    button {
+        padding: 12px 24px;
+        font-size: 1rem;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        color: white;
+        font-weight: bold;
+        width: 100%;
+        margin-top: auto;
+        transition: background 0.2s;
+    }
+
+    .btn-host { background-color: var(--green); }
+    .btn-host:hover { background-color: #1a7f42; }
+
+    .btn-client { background-color: var(--accent); }
+    .btn-client:hover { background-color: var(--button-hover); }
+
+    .warning {
+        background: rgba(240, 178, 50, 0.1);
+        border-left: 4px solid #f0b232;
+        padding: 10px;
+        text-align: left;
+        margin-bottom: 20px;
+        font-size: 0.9rem;
+        color: #f0b232;
+    }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div style="font-size: 3rem; color: var(--accent); margin-bottom: 10px;">
+        <i class="fa-brands fa-discord"></i>
+    </div>
+    <h1>Welcome to ShooymCord</h1>
+    <p>A local peer-to-peer chat system that runs entirely in your browser.</p>
+
+    <div class="warning">
+        <i class="fa-solid fa-triangle-exclamation"></i> 
+        <strong>IMPORTANT:</strong> The "Server Host" must be open on <u>one</u> computer for the chat to work. If the Host closes, the chat stops for everyone.
+    </div>
+
+    <div class="card-container">
+        <div class="card">
+            <div class="icon" style="color: var(--green);">
+                <i class="fa-solid fa-server"></i>
+            </div>
+            <h3 style="margin:0 0 10px 0; color:white;">Server Host</h3>
+            <p style="font-size: 0.85rem; margin-bottom: 15px;">
+                Open this on <b>ONE</b> computer only. This acts as the "Tower" that connects everyone.
+            </p>
+            <button class="btn-host" onclick="window.open('host.html', '_blank')">Open Server</button>
+        </div>
+
+        <div class="card">
+            <div class="icon" style="color: var(--accent);">
+                <i class="fa-solid fa-comments"></i>
+            </div>
+            <h3 style="margin:0 0 10px 0; color:white;">ShooymCord</h3>
+            <p style="font-size: 0.85rem; margin-bottom: 15px;">
+                Open this to chat! Use this on all other computers to join the room.
+            </p>
+            <button class="btn-client" onclick="window.location.href='ShooymCord.html'">Open ShooymCord</button>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
