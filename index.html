@@ -12,49 +12,56 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font-family: 'gg sans', sans-serif; height: 100vh; overflow: hidden; display: flex; }
 
-/* Scrollbars */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: #2b2d31; }
 ::-webkit-scrollbar-thumb { background: #1a1b1e; border-radius: 4px; }
 
-/* Server List */
+/* Layout */
 .servers { width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
 .server-icon { width: 48px; height: 48px; background-color: var(--bg-primary); border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.2s; color: var(--text-normal); position: relative; }
 .server-icon.active { border-radius: 16px; background-color: var(--accent); color: white; }
 
-/* Channels */
 .channels { width: 240px; background: var(--bg-secondary); display: flex; flex-direction: column; }
 .server-header { height: 48px; padding: 0 16px; display: flex; align-items: center; font-weight: bold; box-shadow: 0 1px 0 rgba(4,4,5,0.2); color: var(--header-primary); }
 .channel-list { padding: 8px; flex: 1; overflow-y: auto; }
 .channel-item { padding: 6px 8px; margin-bottom: 2px; border-radius: 4px; color: var(--header-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .channel-item.active { background: rgba(88, 101, 242, 0.3); color: white; }
 .user-bar { background: #232428; height: 52px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
-.user-avatar-small { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
-.user-info { flex: 1; font-size: 0.85rem; font-weight: bold; overflow: hidden; }
+.user-avatar-small { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; object-fit: cover; background: #555; }
+.user-info { flex: 1; font-size: 0.85rem; font-weight: bold; overflow: hidden; margin-left: 8px; }
 
-/* Chat Area */
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); position: relative; }
 .chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 0 rgba(4,4,5,0.2); font-weight: bold; color: var(--header-primary); }
 #chat-feed { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; }
+
+/* Messages */
 .message { padding: 4px 16px; margin-top: 4px; display: flex; gap: 16px; }
 .message:hover { background: rgba(4, 4, 5, 0.07); }
-.avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: #555; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: #555; object-fit: cover; }
 .message-header { display: flex; align-items: baseline; gap: 8px; }
 .username { font-weight: 500; color: #fff; cursor: pointer; }
 .timestamp { font-size: 0.7rem; color: var(--header-secondary); }
-.message-text { color: var(--text-normal); font-size: 1rem; line-height: 1.375rem; white-space: pre-wrap; word-wrap: break-word; }
-.input-area { padding: 0 16px 24px; background: var(--bg-primary); }
-.input-wrapper { background: var(--input-bg); border-radius: 8px; display: flex; align-items: center; padding: 10px 16px; }
-#msg-input { background: transparent; border: none; color: var(--text-normal); outline: none; width: 100%; font-family: inherit; font-size: 1rem; }
 
-/* Role Indicator */
-#role-badge { 
-    padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; color: white; font-weight: bold; 
-    text-transform: uppercase; letter-spacing: 0.5px;
-}
+/* File Attachments */
+.msg-img { max-width: 300px; max-height: 300px; border-radius: 5px; margin-top: 5px; cursor: pointer; }
+.msg-file { background: #2b2d31; padding: 10px; border-radius: 5px; display: inline-flex; align-items: center; gap: 10px; margin-top: 5px; text-decoration: none; color: var(--accent); border: 1px solid #444; }
+.msg-file:hover { background: #333; }
+
+/* Input Area */
+.input-area { padding: 0 16px 24px; background: var(--bg-primary); }
+.input-wrapper { background: var(--input-bg); border-radius: 8px; display: flex; align-items: center; padding: 10px 16px; gap: 10px; }
+#msg-input { background: transparent; border: none; color: var(--text-normal); outline: none; width: 100%; font-family: inherit; font-size: 1rem; }
+.btn-icon { background: none; border: none; color: #b5bac1; cursor: pointer; font-size: 1.2rem; transition: color 0.2s; }
+.btn-icon:hover { color: var(--text-normal); }
+
+/* Role Badge */
+#role-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; color: white; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
 .role-host { background: var(--green); }
 .role-client { background: var(--accent); }
 .role-offline { background: var(--red); }
+
+/* Hidden Inputs */
+#pfp-upload, #file-upload { display: none; }
 </style>
 </head>
 <body>
@@ -64,16 +71,20 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 </nav>
 
 <div class="channels">
-    <div class="server-header" id="server-name">Shooym Community</div>
+    <div class="server-header" id="server-name">Shooym Hub</div>
     <div class="channel-list">
         <div class="channel-item active"><span style="color:#888">#</span> general</div>
-        <div class="channel-item"><span style="color:#888">#</span> memes</div>
+        <div class="channel-item"><span style="color:#888">#</span> files</div>
     </div>
     
     <div class="user-bar">
-        <img src="" id="current-user-avatar" class="user-avatar-small" onclick="changeName()" title="Click to Change Name">
+        <label for="pfp-upload" title="Change Profile Picture">
+            <img src="" id="current-user-avatar" class="user-avatar-small">
+        </label>
+        <input type="file" id="pfp-upload" accept="image/*" onchange="uploadPfp(this)">
+        
         <div class="user-info">
-            <div id="display-username">...</div>
+            <div id="display-username" onclick="changeName()" style="cursor:pointer">...</div>
             <div style="font-size: 0.7rem; color: #aaa;">Online</div>
         </div>
     </div>
@@ -82,100 +93,109 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 <main class="chat-area">
     <header class="chat-header">
         <div><span style="color:var(--header-secondary); margin-right: 4px;">#</span> general</div>
-        <div id="role-badge" class="role-offline">Connecting...</div>
+        <div id="role-badge" class="role-offline">Starting...</div>
     </header>
 
     <div id="chat-feed"></div>
 
     <div class="input-area">
         <div class="input-wrapper">
+            <label for="file-upload" class="btn-icon" title="Send File (Img/PDF)">
+                <i class="fa-solid fa-circle-plus"></i>
+            </label>
+            <input type="file" id="file-upload" accept="image/*,application/pdf" onchange="handleFileUpload(this)">
+            
             <input type="text" id="msg-input" placeholder="Initializing..." disabled>
-            <button onclick="clearMyHistory()" style="background:none; border:none; color:#aaa; cursor:pointer;" title="Clear Local History"><i class="fa-solid fa-trash"></i></button>
+            <button onclick="clearMyHistory()" class="btn-icon" title="Wipe History"><i class="fa-solid fa-trash"></i></button>
         </div>
     </div>
 </main>
 
 <script>
     // --- CONFIGURATION ---
-    const SHARED_SERVER_ID = "shooym-global-room-v3"; 
-    const STORAGE_KEY = "shooym_universal_history_v1";
+    const SHARED_SERVER_ID = "shooym-global-room-v4"; 
+    const STORAGE_KEY = "shooym_history_v4";
+    const PFP_KEY = "shooym_pfp_v1";
 
     // --- STATE ---
     let myName = localStorage.getItem("shooym_username");
     if(!myName) {
-        myName = prompt("Enter Username:", "User" + Math.floor(Math.random()*100));
-        if(!myName) myName = "Anon";
+        myName = "User" + Math.floor(Math.random()*1000);
         localStorage.setItem("shooym_username", myName);
     }
     
+    // Load PFP from storage or use default
+    let myPfp = localStorage.getItem(PFP_KEY) || `https://ui-avatars.com/api/?name=${encodeURIComponent(myName)}&background=232428&color=fff`;
+
     let peer = null;
     let myRole = "offline"; 
     let connections = [];   
     let hostConn = null;    
     let messageHistory = [];
+    let isMigrating = false;
 
-    // --- STARTUP ---
-    updateUI(myName);
+    // --- INITIALIZATION ---
+    updateUI();
     loadHistory(); 
+    initPeer();
 
-    // 1. Try to be the HOST first
-    console.log("Attempting to become Host...");
-    peer = new Peer(SHARED_SERVER_ID);
+    function initPeer() {
+        if(isMigrating) return;
+        console.log("Initializing Peer...");
 
-    peer.on('open', (id) => {
-        becomeHost(id);
-    });
+        // 1. Try to be HOST
+        peer = new Peer(SHARED_SERVER_ID);
 
-    peer.on('error', (err) => {
-        if(err.type === 'unavailable-id') {
-            console.log("Host exists. Switching to Client mode.");
-            becomeClient();
-        } else {
-            console.error("Peer Error:", err);
-        }
-    });
+        peer.on('open', (id) => {
+            becomeHost(id);
+        });
+
+        peer.on('error', (err) => {
+            if(err.type === 'unavailable-id') {
+                console.log("Host exists. Switching to Client.");
+                becomeClient();
+            } else {
+                // If network error, retry in 5s
+                setTimeout(initPeer, 5000);
+            }
+        });
+    }
 
     // --- HOST LOGIC ---
     function becomeHost(id) {
         myRole = 'host';
-        updateRoleDisplay("HOST (Server)");
+        updateRoleDisplay("HOST (You)");
         enableChat();
         
         peer.on('connection', (conn) => {
             connections.push(conn);
-            
             conn.on('open', () => {
-                // Send history to the new person
+                // Sync History (Text Only)
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => conn.send(msg));
                 }
             });
-
             conn.on('data', (data) => {
-                // 1. Save to MY storage (and check for duplicates)
-                const isNew = handleIncomingMessage(data);
-                
-                // 2. Broadcast to everyone else ONLY if it was new to me
-                // (This prevents infinite loops of re-broadcasting old messages)
-                if (isNew) {
-                    broadcast(data); 
+                // If it's a file, we broadcast but DO NOT SAVE to history (too big)
+                if(data.type === 'image' || data.type === 'pdf') {
+                    broadcast(data);
+                    renderMessage(data); // Show locally
+                } else {
+                    // It's text, save and broadcast
+                    if (saveLocally(data)) broadcast(data); 
                 }
             });
-
-            conn.on('close', () => {
-                connections = connections.filter(c => c !== conn);
-            });
+            conn.on('close', () => connections = connections.filter(c => c !== conn));
         });
     }
 
     function broadcast(data) {
-        connections.forEach(c => {
-            if(c.open) c.send(data);
-        });
+        connections.forEach(c => { if(c.open) c.send(data); });
     }
 
     // --- CLIENT LOGIC ---
     function becomeClient() {
+        // We create a random ID for ourselves
         peer = new Peer(); 
         
         peer.on('open', () => {
@@ -185,77 +205,155 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function connectToHost() {
-        updateRoleDisplay("Connecting to Host...");
+        updateRoleDisplay("Connecting...");
         hostConn = peer.connect(SHARED_SERVER_ID);
 
         hostConn.on('open', () => {
-            updateRoleDisplay("Connected to Chat");
+            updateRoleDisplay("Connected");
             enableChat();
         });
 
         hostConn.on('data', (data) => {
-            handleIncomingMessage(data);
+            // Received data from host
+            if(data.type === 'image' || data.type === 'pdf') {
+                renderMessage(data); // Just show files
+            } else {
+                saveLocally(data); // Save text
+                renderMessage(data);
+            }
         });
 
+        // --- THE MIGRATION MAGIC ---
         hostConn.on('close', () => {
-            updateRoleDisplay("Host Disconnected");
+            updateRoleDisplay("Host Left!");
             disableChat();
-            setTimeout(connectToHost, 3000); // Retry logic
+            handleHostDisconnect();
         });
         
-        peer.on('error', (err) => {
-            setTimeout(connectToHost, 3000);
-        });
+        peer.on('error', () => handleHostDisconnect());
     }
 
-    // --- MESSAGE HANDLING (THE FIX) ---
-    
-    function handleIncomingMessage(data) {
-        // --- DUPLICATE CHECKER ---
-        // We check if we have a message with the same ID
-        // OR (for old messages) same timestamp + text
-        const exists = messageHistory.some(m => 
-            (m.id && m.id === data.id) || 
-            (!m.id && m.timestamp === data.timestamp && m.msg === data.msg)
-        );
+    function handleHostDisconnect() {
+        if(isMigrating) return;
+        isMigrating = true;
+        console.log("Host disconnected. Attempting to take over...");
+        
+        // Destroy old connection
+        if(peer) peer.destroy();
+        
+        // WAIT A RANDOM TIME (1 to 4 seconds)
+        // This prevents everyone from trying to be host at the exact same millisecond
+        const delay = Math.floor(Math.random() * 3000) + 1000;
+        updateRoleDisplay(`Finding new Host in ${delay/1000}s...`);
 
-        if (exists) {
-            return false; // STOP! Do not render, do not save.
-        }
-
-        // If we get here, it is a NEW message
-        messageHistory.push(data);
-        saveToStorage();
-        renderMessage(data);
-        return true; // Report success
+        setTimeout(() => {
+            isMigrating = false;
+            initPeer(); // RESTART THE PROCESS
+        }, delay);
     }
 
+    // --- MESSAGING ---
     function sendMessage() {
         const text = msgInput.value.trim();
         if (!text) return;
-
-        // CREATE MESSAGE WITH UNIQUE ID
-        const msgData = {
+        
+        const data = {
             id: Date.now().toString(36) + Math.random().toString(36).substr(2),
             user: myName,
+            pfp: myPfp, // Send my PFP with message
             msg: text,
+            type: 'text',
             timestamp: Date.now()
         };
 
-        // 1. Show & Save Locally
-        handleIncomingMessage(msgData);
-
-        // 2. Send over network
-        if (myRole === 'host') {
-            broadcast(msgData);
-        } else if (myRole === 'client' && hostConn && hostConn.open) {
-            hostConn.send(msgData);
-        }
-
+        dispatch(data);
         msgInput.value = '';
     }
 
-    // --- STORAGE SYSTEM ---
+    function handleFileUpload(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        // 2MB Limit (Browsers will crash if larger)
+        if (file.size > 2000000) {
+            alert("File too big! Limit is 2MB.");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const type = file.type.includes('pdf') ? 'pdf' : 'image';
+            
+            const data = {
+                id: Date.now().toString(36),
+                user: myName,
+                pfp: myPfp,
+                fileData: e.target.result, // The Base64 data
+                fileName: file.name,
+                type: type,
+                timestamp: Date.now()
+            };
+            
+            // We dispatch files, but logic above prevents saving them to history
+            dispatch(data);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function dispatch(data) {
+        // Show locally
+        renderMessage(data);
+        
+        // Save locally ONLY if text
+        if(data.type === 'text') saveLocally(data);
+
+        // Send out
+        if (myRole === 'host') broadcast(data);
+        else if (myRole === 'client' && hostConn && hostConn.open) hostConn.send(data);
+    }
+
+    // --- PFP LOGIC ---
+    function uploadPfp(input) {
+        const file = input.files[0];
+        if(!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            // Resize image logic could go here, but for now we just save raw base64
+            // We must limit size or localStorage will break
+            if(file.size > 500000) { alert("PFP image too large! keep under 500kb"); return; }
+            
+            myPfp = e.target.result;
+            localStorage.setItem(PFP_KEY, myPfp);
+            updateUI();
+            alert("Profile Picture Updated!");
+        }
+        reader.readAsDataURL(file);
+    }
+
+    function changeName() {
+        let newName = prompt("New Username:", myName);
+        if(newName) {
+            myName = newName;
+            localStorage.setItem("shooym_username", myName);
+            updateUI();
+        }
+    }
+
+    // --- STORAGE & UI ---
+    function saveLocally(data) {
+        // Deduplicate
+        const exists = messageHistory.some(m => m.id === data.id);
+        if (exists) return false;
+
+        messageHistory.push(data);
+        // Limit history to 200 messages to save space
+        if(messageHistory.length > 200) messageHistory.shift();
+        
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+        return true;
+    }
+
     function loadHistory() {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
@@ -265,62 +363,51 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 feed.innerHTML = ''; 
                 messageHistory.forEach(msg => renderMessage(msg));
             }
-        } catch(e) { console.error("Load error", e); }
-    }
-
-    function saveToStorage() {
-        // Limit to 500 messages
-        if(messageHistory.length > 500) messageHistory.shift();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+        } catch(e) {}
     }
 
     function clearMyHistory() {
-        if(confirm("Clear your LOCAL chat history?")) {
+        if(confirm("Clear local history?")) {
             localStorage.removeItem(STORAGE_KEY);
             messageHistory = [];
             document.getElementById('chat-feed').innerHTML = '';
         }
     }
 
-    // --- UI FUNCTIONS ---
-    const msgInput = document.getElementById('msg-input');
-    msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
-    function enableChat() {
-        msgInput.disabled = false;
-        msgInput.placeholder = `Message #${document.querySelector('.channel-item.active').innerText.replace('# ','')}`;
-        msgInput.focus();
-    }
-    
-    function disableChat() {
-        msgInput.disabled = true;
-        msgInput.placeholder = "Searching for connection...";
-    }
-
-    function updateRoleDisplay(statusText) {
-        const badge = document.getElementById('role-badge');
-        badge.innerText = statusText;
-        badge.className = ""; 
-        if(myRole === 'host') badge.classList.add('role-host');
-        else if(statusText.includes("Connected")) badge.classList.add('role-client');
-        else badge.classList.add('role-offline');
+    function updateUI() {
+        document.getElementById('display-username').innerText = myName;
+        document.getElementById('current-user-avatar').src = myPfp;
     }
 
     function renderMessage(data) {
         const feed = document.getElementById('chat-feed');
-        const date = new Date(data.timestamp || Date.now());
+        const date = new Date(data.timestamp);
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user)}&background=random`;
+        
+        // Use the PFP sent with the message, or a fallback
+        const avatar = data.pfp || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user)}`;
+
+        let content = "";
+        if (data.type === 'image') {
+            content = `<img src="${data.fileData}" class="msg-img" onclick="window.open(this.src)">`;
+        } else if (data.type === 'pdf') {
+            content = `<a href="${data.fileData}" download="${data.fileName}" class="msg-file"><i class="fa-solid fa-file-pdf"></i> ${data.fileName}</a>`;
+        } else {
+             // Text
+            const tempDiv = document.createElement('div');
+            tempDiv.textContent = data.msg;
+            content = `<div class="message-text" style="color:#dbdee1; line-height:1.4">${tempDiv.innerHTML}</div>`;
+        }
 
         const msgHTML = `
             <div class="message">
-                <img src="${avatarUrl}" class="avatar">
+                <img src="${avatar}" class="avatar">
                 <div class="message-content">
                     <div class="message-header">
                         <span class="username">${data.user}</span>
                         <span class="timestamp">${timeStr}</span>
                     </div>
-                    <div class="message-text">${data.msg}</div>
+                    ${content}
                 </div>
             </div>`;
 
@@ -328,18 +415,19 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         feed.scrollTop = feed.scrollHeight;
     }
 
-    function updateUI(name) {
-        document.getElementById('display-username').innerText = name;
-        document.getElementById('current-user-avatar').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=232428&color=fff`;
-    }
+    const msgInput = document.getElementById('msg-input');
+    msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
 
-    function changeName() {
-        let newName = prompt("New Username:", myName);
-        if(newName) {
-            myName = newName;
-            localStorage.setItem("shooym_username", myName);
-            updateUI(myName);
-        }
+    function enableChat() { msgInput.disabled = false; msgInput.placeholder = `Message #general`; }
+    function disableChat() { msgInput.disabled = true; msgInput.placeholder = "Searching for connection..."; }
+    
+    function updateRoleDisplay(text) {
+        const badge = document.getElementById('role-badge');
+        badge.innerText = text;
+        badge.className = ""; 
+        if(myRole === 'host') badge.classList.add('role-host');
+        else if(text.includes("Connected")) badge.classList.add('role-client');
+        else badge.classList.add('role-offline');
     }
 </script>
 </body>
