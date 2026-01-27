@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShooymCord SERVER (+History)</title>
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+<style>
+  body { background: #1e1f22; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
+  .box { background: #2b2d31; padding: 40px; border-radius: 10px; text-align: center; width: 500px; }
+  h1 { color: #5865f2; margin-bottom: 5px; }
+  .log { margin-top: 20px; height: 300px; overflow-y: auto; background: #111; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border-radius: 5px; border: 1px solid #444; }
+  .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
+  .online { background-color: #23a559; }
+  .error { background-color: #f23f43; }
+</style>
+</head>
+<body>
+
+<div class="box">
+    <h1>SERVER HOST</h1>
+    <p>Status: <span id="status"><span class="status-dot"></span>Initializing...</span></p>
+    <p style="color: #aaa; font-size: 0.9rem;">Keep this tab open to maintain the chat room.</p>
+    
+    <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+        <span>Users Online: <b id="user-count">0</b></span>
+        <span>Messages Stored: <b id="msg-count">0</b></span>
+    </div>
+
+    <div class="log" id="server-log"></div>
+    <button onclick="clearHistory()" style="margin-top:10px; padding: 5px 10px; cursor: pointer; background: #da373c; border:none; color:white; border-radius:4px;">Clear History</button>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    const SERVER_ID = "shooym-server-main-v1"; 
+
+    // --- STATE ---
+    const peer = new Peer(SERVER_ID);
+    let connections = [];
+    let messageHistory = []; // This stores all chat messages
+
+    // 1. Start Server
+    peer.on('open', (id) => {
+        updateStatus("ONLINE (ID: " + id + ")", "online");
+        log("Server started. Waiting for connections...");
+    });
+
+    peer.on('error', (err) => {
+        if(err.type === 'unavailable-id') {
+            updateStatus("ERROR: Server ID is taken. Close other tabs.", "error");
+        } else {
+            log("Error: " + err.type);
+        }
+    });
+
+    // 2. Handle New Users
+    peer.on('connection', (conn) => {
+        connections.push(conn);
+        updateUserCount();
+        log(`New connection established.`);
+
+        conn.on('open', () => {
+            // A. SEND HISTORY IMMEDIATELY
+            // We loop through history and send each message to the new user
+            if(messageHistory.length > 0) {
+                log(`Sending ${messageHistory.length} past messages to new user.`);
+                messageHistory.forEach(msg => {
+                    conn.send(msg);
+                });
+            }
+        });
+
+        conn.on('data', (data) => {
+            // B. SAVE MESSAGE TO HISTORY
+            // We only save text messages, not system pings if you add them later
+            if(data.msg) {
+                messageHistory.push(data);
+                document.getElementById('msg-count').innerText = messageHistory.length;
+            }
+
+            // C. BROADCAST TO EVERYONE
+            broadcast(data);
+        });
+
+        conn.on('close', () => {
+            connections = connections.filter(c => c !== conn);
+            updateUserCount();
+            log("User disconnected.");
+        });
+    });
+
+    function broadcast(data) {
+        connections.forEach(c => {
+            if(c.open) {
+                c.send(data);
+            }
+        });
+    }
+
+    // --- UI HELPERS ---
+    function log(txt) {
+        const d = document.getElementById('server-log');
+        const time = new Date().toLocaleTimeString();
+        d.innerHTML += `<div><span style="color:#777">[${time}]</span> ${txt}</div>`;
+        d.scrollTop = d.scrollHeight;
+    }
+
+    function updateStatus(text, type) {
+        const el = document.getElementById('status');
+        let color = "#bbb";
+        if(type === 'online') color = "#23a559";
+        if(type === 'error') color = "#f23f43";
+        
+        el.innerHTML = `<span class="status-dot" style="background-color:${color}"></span>${text}`;
+        el.style.color = type === 'error' ? '#f23f43' : 'white';
+    }
+
+    function updateUserCount() {
+        document.getElementById('user-count').innerText = connections.length;
+    }
+
+    function clearHistory() {
+        messageHistory = [];
+        document.getElementById('msg-count').innerText = "0";
+        log("Message history cleared by host.");
+    }
+</script>
+</body>
+</html>
