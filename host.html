@@ -3,128 +3,197 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ShooymCord SERVER (+History)</title>
+<title>ShooymCord SERVER (GitHub Edition)</title>
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <style>
   body { background: #1e1f22; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column; }
-  .box { background: #2b2d31; padding: 40px; border-radius: 10px; text-align: center; width: 500px; }
+  .box { background: #2b2d31; padding: 40px; border-radius: 10px; text-align: center; width: 500px; border: 1px solid #444; }
   h1 { color: #5865f2; margin-bottom: 5px; }
-  .log { margin-top: 20px; height: 300px; overflow-y: auto; background: #111; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border-radius: 5px; border: 1px solid #444; }
+  p { color: #aaa; font-size: 0.9rem; margin-top: 0; }
+  
+  .log { margin-top: 20px; height: 250px; overflow-y: auto; background: #111; padding: 10px; text-align: left; font-family: monospace; font-size: 0.8rem; border-radius: 5px; border: 1px solid #444; }
+  
   .status-dot { height: 10px; width: 10px; background-color: #bbb; border-radius: 50%; display: inline-block; margin-right: 5px; }
-  .online { background-color: #23a559; }
-  .error { background-color: #f23f43; }
+  
+  .controls { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+  
+  button { padding: 8px 12px; cursor: pointer; border:none; border-radius:4px; font-weight: bold; transition: 0.2s; }
+  .btn-save { background: #23a559; color:white; }
+  .btn-save:hover { background: #1a7f42; }
+  
+  .btn-load { background: #5865f2; color:white; }
+  .btn-load:hover { background: #4752c4; }
+
+  .btn-clear { background: #da373c; color:white; }
+  .btn-clear:hover { background: #a1282c; }
+
+  /* Hidden file input */
+  #file-input { display: none; }
 </style>
 </head>
 <body>
 
 <div class="box">
-    <h1>SERVER HOST</h1>
+    <h1>SHOOYM HOST</h1>
     <p>Status: <span id="status"><span class="status-dot"></span>Initializing...</span></p>
-    <p style="color: #aaa; font-size: 0.9rem;">Keep this tab open to maintain the chat room.</p>
     
-    <div style="display: flex; justify-content: space-between; margin-top: 10px;">
-        <span>Users Online: <b id="user-count">0</b></span>
-        <span>Messages Stored: <b id="msg-count">0</b></span>
+    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.8rem; color: #ccc;">
+        <span>Online: <b id="user-count">0</b></span>
+        <span>Saved Msgs: <b id="msg-count">0</b></span>
     </div>
 
     <div class="log" id="server-log"></div>
-    <button onclick="clearHistory()" style="margin-top:10px; padding: 5px 10px; cursor: pointer; background: #da373c; border:none; color:white; border-radius:4px;">Clear History</button>
+    
+    <div class="controls">
+        <button class="btn-save" onclick="downloadBackup()" title="Download History">Save Backup</button>
+        <button class="btn-load" onclick="document.getElementById('file-input').click()" title="Load History">Load Backup</button>
+        <button class="btn-clear" onclick="wipeData()" title="Delete History">Wipe</button>
+    </div>
+    
+    <input type="file" id="file-input" accept=".json" onchange="loadBackup(this)">
+    
+    <p style="margin-top: 15px; font-size: 0.75rem; color: #666;">
+        *Data is saved in this browser's cookies/storage.
+    </p>
 </div>
 
 <script>
     // --- CONFIGURATION ---
     const SERVER_ID = "shooym-server-main-v1"; 
+    const STORAGE_KEY = "shooym_history_v1";
 
-    // --- STATE ---
     const peer = new Peer(SERVER_ID);
     let connections = [];
-    let messageHistory = []; // This stores all chat messages
+    let messageHistory = [];
 
-    // 1. Start Server
+    // --- 1. AUTO-LOAD (COOKIES/LOCAL STORAGE) ---
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            messageHistory = JSON.parse(saved);
+            log(`Loaded ${messageHistory.length} messages from browser storage.`);
+        }
+    } catch (e) {
+        log("No previous history found.");
+    }
+    updateCounts();
+
+    // --- 2. PEER SERVER LOGIC ---
     peer.on('open', (id) => {
         updateStatus("ONLINE (ID: " + id + ")", "online");
-        log("Server started. Waiting for connections...");
+        log("Server is running on GitHub Pages!");
     });
 
     peer.on('error', (err) => {
         if(err.type === 'unavailable-id') {
-            updateStatus("ERROR: Server ID is taken. Close other tabs.", "error");
+            updateStatus("ERROR: ID Taken. Close other tabs.", "error");
         } else {
             log("Error: " + err.type);
         }
     });
 
-    // 2. Handle New Users
     peer.on('connection', (conn) => {
         connections.push(conn);
         updateUserCount();
-        log(`New connection established.`);
-
+        
         conn.on('open', () => {
-            // A. SEND HISTORY IMMEDIATELY
-            // We loop through history and send each message to the new user
+            log(`User connected.`);
+            // Send full history to new user
             if(messageHistory.length > 0) {
-                log(`Sending ${messageHistory.length} past messages to new user.`);
-                messageHistory.forEach(msg => {
-                    conn.send(msg);
-                });
+                messageHistory.forEach(msg => conn.send(msg));
             }
         });
 
         conn.on('data', (data) => {
-            // B. SAVE MESSAGE TO HISTORY
-            // We only save text messages, not system pings if you add them later
-            if(data.msg) {
+            if(data.msg || data.fileData) {
+                // Save to Memory
                 messageHistory.push(data);
-                document.getElementById('msg-count').innerText = messageHistory.length;
+                // Save to Browser Storage (Cookie-like)
+                saveToStorage();
+                updateCounts();
             }
-
-            // C. BROADCAST TO EVERYONE
+            // Broadcast to everyone
             broadcast(data);
         });
 
         conn.on('close', () => {
             connections = connections.filter(c => c !== conn);
             updateUserCount();
-            log("User disconnected.");
         });
     });
 
     function broadcast(data) {
-        connections.forEach(c => {
-            if(c.open) {
-                c.send(data);
+        connections.forEach(c => { if(c.open) c.send(data); });
+    }
+
+    // --- 3. STORAGE & BACKUP FUNCTIONS ---
+
+    function saveToStorage() {
+        try {
+            // Keep only last 500 messages to prevent storage full errors
+            if(messageHistory.length > 500) messageHistory.shift();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+        } catch (e) {
+            log("Storage Warning: Browser storage full.");
+        }
+    }
+
+    function downloadBackup() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(messageHistory));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "shooym_chat_backup.json");
+        document.body.appendChild(downloadAnchorNode); // required for firefox
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+        log("Backup file downloaded.");
+    }
+
+    function loadBackup(input) {
+        const file = input.files[0];
+        if(!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const loadedHistory = JSON.parse(e.target.result);
+                if(Array.isArray(loadedHistory)) {
+                    messageHistory = loadedHistory;
+                    saveToStorage();
+                    updateCounts();
+                    log(`Restored ${messageHistory.length} messages from file.`);
+                    alert("History loaded! Refresh the client pages to see it.");
+                }
+            } catch(err) {
+                alert("Invalid file!");
             }
-        });
+        };
+        reader.readAsText(file);
+    }
+
+    function wipeData() {
+        if(confirm("Delete all history?")) {
+            messageHistory = [];
+            localStorage.removeItem(STORAGE_KEY);
+            updateCounts();
+            log("History wiped.");
+        }
     }
 
     // --- UI HELPERS ---
     function log(txt) {
         const d = document.getElementById('server-log');
-        const time = new Date().toLocaleTimeString();
-        d.innerHTML += `<div><span style="color:#777">[${time}]</span> ${txt}</div>`;
+        d.innerHTML += `<div>> ${txt}</div>`;
         d.scrollTop = d.scrollHeight;
     }
-
     function updateStatus(text, type) {
         const el = document.getElementById('status');
-        let color = "#bbb";
-        if(type === 'online') color = "#23a559";
-        if(type === 'error') color = "#f23f43";
-        
+        let color = type === 'online' ? "#23a559" : "#f23f43";
         el.innerHTML = `<span class="status-dot" style="background-color:${color}"></span>${text}`;
-        el.style.color = type === 'error' ? '#f23f43' : 'white';
+        el.style.color = color;
     }
-
-    function updateUserCount() {
-        document.getElementById('user-count').innerText = connections.length;
-    }
-
-    function clearHistory() {
-        messageHistory = [];
-        document.getElementById('msg-count').innerText = "0";
-        log("Message history cleared by host.");
-    }
+    function updateUserCount() { document.getElementById('user-count').innerText = connections.length; }
+    function updateCounts() { document.getElementById('msg-count').innerText = messageHistory.length; }
 </script>
 </body>
 </html>
