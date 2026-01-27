@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ShooymCord</title>
+<title>ShooymCord V8 (Sync Edition)</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
@@ -114,8 +114,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <script>
     // --- CONFIGURATION ---
-    const SHARED_SERVER_ID = "shooym-global-room-v7-stable"; 
-    const STORAGE_KEY = "shooym_history_v7";
+    const SHARED_SERVER_ID = "shooym-global-room-v8-sync"; 
+    const STORAGE_KEY = "shooym_history_v8";
     const PFP_KEY = "shooym_pfp_v1";
 
     // --- STATE ---
@@ -173,7 +173,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         updateRoleDisplay("HOST (You)");
         enableChat();
         
-        // BUG FIX: clear old connections from previous sessions
         connections = [];
 
         // START SENDING HEARTBEATS
@@ -184,14 +183,21 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         peer.on('connection', (conn) => {
             connections.push(conn);
             conn.on('open', () => {
+                // Send host's current history to the new client
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => conn.send(msg));
                 }
             });
             conn.on('data', (data) => {
-                // Ignore pings from other confused hosts
                 if(data.type === 'ping') return;
 
+                // SPECIAL: Client is sharing their history to sync with us
+                if(data.type === 'history-merge') {
+                    handleHistoryMerge(data.data);
+                    return;
+                }
+
+                // Standard Message
                 if (isNewMessage(data.id)) {
                     processIncomingData(data);
                     broadcast(data);
@@ -202,7 +208,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function broadcast(data) {
-        // Filter out closed connections to prevent errors
         connections = connections.filter(c => c.open);
         connections.forEach(c => c.send(data));
     }
@@ -223,6 +228,15 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         hostConn.on('open', () => {
             updateRoleDisplay("Connected");
             enableChat();
+            
+            // --- SYNC FIX: Send my local history to host immediately ---
+            // This ensures if I was the host before, the new host gets my data
+            if(messageHistory.length > 0) {
+                hostConn.send({
+                    type: 'history-merge',
+                    data: messageHistory
+                });
+            }
             
             lastHeartbeat = Date.now();
             monitorInterval = setInterval(checkHeartbeat, 1000); 
@@ -245,6 +259,28 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         });
         
         peer.on('error', () => handleHostDisconnect());
+    }
+
+    // --- MERGE LOGIC (THE FIX) ---
+    function handleHistoryMerge(incomingHistory) {
+        let dirty = false;
+        
+        incomingHistory.forEach(msg => {
+            if(!processedIds.has(msg.id)) {
+                processedIds.add(msg.id);
+                messageHistory.push(msg);
+                // As host, we must broadcast these "recovered" messages to everyone else
+                broadcast(msg);
+                dirty = true;
+            }
+        });
+
+        if(dirty) {
+            // Sort by time so old messages don't appear at the bottom
+            messageHistory.sort((a, b) => a.timestamp - b.timestamp);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+            reRenderAllMessages();
+        }
     }
 
     // --- THE 5-SECOND RULE ---
@@ -288,11 +324,25 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function processIncomingData(data) {
-        renderMessage(data);
-        if(data.type === 'text') {
-            messageHistory.push(data);
-            if(messageHistory.length > 200) messageHistory.shift();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+        // We push first, then sort/render to ensure time order is correct
+        // But for single new messages (which are usually "now"), standard render is fine
+        // unless the timestamp is old.
+        
+        const isOldMessage = (Date.now() - data.timestamp) > 5000;
+        
+        if(data.type === 'text' || data.type === 'image' || data.type === 'pdf') {
+             messageHistory.push(data);
+             if(messageHistory.length > 200) messageHistory.shift();
+             localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
+        }
+
+        if(isOldMessage) {
+            // If we receive an old message, we must resort and redraw everything
+            messageHistory.sort((a, b) => a.timestamp - b.timestamp);
+            reRenderAllMessages();
+        } else {
+            // It's a current message, just append it
+            renderMessage(data);
         }
     }
 
@@ -335,6 +385,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             
             if(isNewMessage(data.id)) {
                 renderMessage(data); 
+                // Also save file messages to history
+                messageHistory.push(data);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
             }
             dispatch(data);
         };
@@ -374,13 +427,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             const saved = localStorage.getItem(STORAGE_KEY);
             if(saved) {
                 messageHistory = JSON.parse(saved);
-                const feed = document.getElementById('chat-feed');
-                feed.innerHTML = ''; 
-                processedIds.clear(); 
-                messageHistory.forEach(msg => {
-                    processedIds.add(msg.id); 
-                    renderMessage(msg);
-                });
+                reRenderAllMessages();
             }
         } catch(e) {}
     }
@@ -397,6 +444,16 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function updateUI() {
         document.getElementById('display-username').innerText = myName;
         document.getElementById('current-user-avatar').src = myPfp;
+    }
+
+    function reRenderAllMessages() {
+        const feed = document.getElementById('chat-feed');
+        feed.innerHTML = '';
+        processedIds.clear();
+        messageHistory.forEach(msg => {
+            processedIds.add(msg.id);
+            renderMessage(msg);
+        });
     }
 
     function renderMessage(data) {
