@@ -172,16 +172,15 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <div id="call-modal">
     <div class="call-status" id="call-text">Incoming Call...</div>
-    <div class="call-actions" id="call-buttons">
-        </div>
+    <div class="call-actions" id="call-buttons"></div>
 </div>
 
-<audio id="remote-audio" autoplay></audio>
+<audio id="remote-audio" autoplay playsinline></audio>
 
 <script>
     // --- CONFIGURATION ---
-    const SHARED_SERVER_ID = "shooym-global-room-v9-chan"; 
-    const STORAGE_KEY = "shooym_history_v9";
+    const SHARED_SERVER_ID = "shooym-global-room-v12-fixed";
+    const STORAGE_KEY = "shooym_history_v12";
     const PFP_KEY = "shooym_pfp_v1";
 
     // --- STATE ---
@@ -207,7 +206,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     let localStream = null;
 
     // --- HEARTBEAT VARIABLES ---
-    let lastHeartbeat = 0;
+    let lastHeartbeat = Date.now();
     let heartbeatInterval = null; 
     let monitorInterval = null;   
 
@@ -276,6 +275,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                     <div><strong>Username:</strong> ${myName}</div>
                     <div><strong>Peer ID:</strong> ${peer ? peer.id : 'Initializing...'}</div>
                     <div><strong>Current Role:</strong> ${myRole}</div>
+                    <div><strong>Last Heartbeat:</strong> ${Date.now() - lastHeartbeat}ms ago</div>
                 </div>
                 <div class="section">
                     <h2>Connection Map (${connectionCount} Active)</h2>
@@ -302,6 +302,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
         // 2. LISTEN FOR INCOMING CALLS
         peer.on('call', (call) => {
+            console.log("Receiving call...");
             handleIncomingCall(call);
         });
 
@@ -310,7 +311,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 console.log("Host exists. Switching to Client.");
                 becomeClient();
             } else {
-                setTimeout(initPeer, 3000);
+                console.log("Peer Error:", err);
+                if(err.type === 'peer-unavailable') { /* Ignore */ }
+                else if(err.type === 'network') { setTimeout(initPeer, 5000); }
             }
         });
     }
@@ -326,7 +329,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         if (!targetPeerId || targetPeerId === 'undefined' || targetPeerId === peer.id) {
             btn.style.opacity = '0.5';
             btn.style.pointerEvents = 'none';
-            btn.innerHTML = `<i class="fa-solid fa-phone-slash"></i> Cannot Call`;
+            btn.innerHTML = `<i class="fa-solid fa-phone-slash"></i> Cannot Call (Invalid ID)`;
         } else {
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
@@ -353,7 +356,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
                 call.on('stream', (remoteStream) => {
                     playStream(remoteStream);
-                    showCallUI(`In Call with ${username}`, true);
+                    showCallUI(`Connected to ${username}`, true);
                 });
 
                 call.on('close', endCall);
@@ -372,7 +375,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then((stream) => {
                     localStream = stream;
-                    call.answer(stream); // Answer the call with an A/V stream.
+                    call.answer(stream); 
                     
                     call.on('stream', (remoteStream) => {
                         playStream(remoteStream);
@@ -425,6 +428,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function playStream(stream) {
         const audio = document.getElementById('remote-audio');
         audio.srcObject = stream;
+        audio.play().catch(e => console.log("Audio play failed (interaction needed):", e));
     }
 
     function endCall() {
@@ -460,11 +464,15 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         enableChat();
         connections = [];
 
-        heartbeatInterval = setInterval(() => { broadcast({ type: 'ping' }); }, 2000); 
+        // Ping Clients every 2 seconds
+        heartbeatInterval = setInterval(() => { 
+            broadcast({ type: 'ping' }); 
+        }, 2000); 
 
         peer.on('connection', (conn) => {
             connections.push(conn);
             conn.on('open', () => {
+                // Send history
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => conn.send(msg));
                 }
@@ -496,6 +504,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             myRole = 'client';
             connectToHost();
         });
+        // Important: Re-attach call listener for client mode
+        peer.on('call', (call) => handleIncomingCall(call));
     }
 
     function connectToHost() {
@@ -506,6 +516,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             updateRoleDisplay("Connected");
             enableChat();
             
+            // SYSTEM MESSAGE REMOVED HERE
+            
             if(messageHistory.length > 0) {
                 hostConn.send({
                     type: 'history-merge',
@@ -514,24 +526,28 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             }
             
             lastHeartbeat = Date.now();
-            monitorInterval = setInterval(checkHeartbeat, 1000); 
+            monitorInterval = setInterval(checkHeartbeat, 2000); 
         });
 
         hostConn.on('data', (data) => {
-            if(data.type === 'ping') {
-                lastHeartbeat = Date.now();
-                return;
-            }
+            lastHeartbeat = Date.now(); // Any data counts as heartbeat
+            
+            if(data.type === 'ping') return;
+
             if (isNewMessage(data.id)) {
                 processIncomingData(data);
             }
         });
 
         hostConn.on('close', () => {
-            handleHostDisconnect();
+            console.log("Host connection closed.");
+            // Do NOT immediately migrate, wait for heartbeat check
         });
         
-        peer.on('error', () => handleHostDisconnect());
+        peer.on('error', (err) => {
+            console.log("Peer error in client mode:", err);
+            // Only disconnect if critical
+        });
     }
 
     // --- MERGE LOGIC ---
@@ -555,8 +571,18 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- HEARTBEAT & DISCONNECT ---
     function checkHeartbeat() {
-        if (Date.now() - lastHeartbeat > 5000) {
-            console.warn("HEARTBEAT LOST!");
+        if(myRole === 'host') return; // Hosts don't check heartbeat
+        
+        const timeSinceLast = Date.now() - lastHeartbeat;
+        
+        // If connection is actually open, force heartbeat update to prevent migration
+        if (hostConn && hostConn.open) {
+            if (timeSinceLast > 5000) lastHeartbeat = Date.now(); // Fake it if socket is alive
+            return;
+        }
+
+        if (timeSinceLast > 10000) { // 10 Seconds timeout
+            console.warn("HEARTBEAT LOST! Migrating...");
             handleHostDisconnect();
         }
     }
