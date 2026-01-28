@@ -100,11 +100,13 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     border: 1px solid #2b2d31;
     width: 280px;
 }
-.call-status { font-weight: bold; margin-bottom: 12px; font-size: 1.1rem; }
-.call-actions { display: flex; gap: 10px; justify-content: flex-end; }
-.btn-call { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; }
+.call-status { font-weight: bold; margin-bottom: 8px; font-size: 1.1rem; }
+.call-subtext { font-size: 0.8rem; color: #bbb; margin-bottom: 12px; }
+.call-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;}
+.btn-call { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; font-size: 0.9rem; }
 .btn-accept { background: #23a559; }
 .btn-decline { background: #fa777c; }
+.btn-force-audio { background: #5865f2; width: 100%; margin-bottom: 5px; }
 
 /* Hidden Inputs */
 #pfp-upload, #file-upload { display: none; }
@@ -172,6 +174,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <div id="call-modal">
     <div class="call-status" id="call-text">Incoming Call...</div>
+    <div class="call-subtext" id="call-mic-status">Waiting for audio...</div>
     <div class="call-actions" id="call-buttons"></div>
 </div>
 
@@ -179,7 +182,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <script>
     // --- CONFIGURATION ---
-    const SHARED_SERVER_ID = "shooym-global-room-v12-fixed";
+    const SHARED_SERVER_ID = "shooym-v12-2-audio-fix"; // New ID to clear old connections
     const STORAGE_KEY = "shooym_history_v12";
     const PFP_KEY = "shooym_pfp_v1";
 
@@ -204,6 +207,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     // --- CALLING STATE ---
     let currentCall = null;
     let localStream = null;
+    let remoteStreamRef = null;
 
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = Date.now();
@@ -275,7 +279,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                     <div><strong>Username:</strong> ${myName}</div>
                     <div><strong>Peer ID:</strong> ${peer ? peer.id : 'Initializing...'}</div>
                     <div><strong>Current Role:</strong> ${myRole}</div>
-                    <div><strong>Last Heartbeat:</strong> ${Date.now() - lastHeartbeat}ms ago</div>
                 </div>
                 <div class="section">
                     <h2>Connection Map (${connectionCount} Active)</h2>
@@ -350,6 +353,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             .then((stream) => {
                 localStream = stream;
                 showCallUI(`Calling ${username}...`, true);
+                updateMicStatus("Mic Active. Calling...");
                 
                 const call = peer.call(targetPeerId, stream);
                 currentCall = call;
@@ -370,12 +374,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     // 3. Handle Incoming Call
     function handleIncomingCall(call) {
         currentCall = call;
+        updateMicStatus("User is calling you...");
         showCallUI(`Incoming call from ${call.peer}...`, false, () => {
             // On Accept
             navigator.mediaDevices.getUserMedia({ audio: true })
                 .then((stream) => {
                     localStream = stream;
                     call.answer(stream); 
+                    updateMicStatus("Mic Active. Connected.");
                     
                     call.on('stream', (remoteStream) => {
                         playStream(remoteStream);
@@ -385,7 +391,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                     call.on('close', endCall);
                 })
                 .catch(err => {
-                    alert("No Mic Access");
+                    alert("No Mic Access: " + err);
                     endCall();
                 });
         });
@@ -417,6 +423,17 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             btns.appendChild(declineBtn);
         } else {
             // In Call / Calling State
+            
+            // FORCE AUDIO BUTTON (Fix for silent audio)
+            const forceAudioBtn = document.createElement('button');
+            forceAudioBtn.className = 'btn-call btn-force-audio';
+            forceAudioBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i> Force Enable Audio';
+            forceAudioBtn.onclick = () => {
+                if(remoteStreamRef) playStream(remoteStreamRef);
+                else alert("Audio not ready yet, wait a second.");
+            };
+            btns.appendChild(forceAudioBtn);
+
             const endBtn = document.createElement('button');
             endBtn.className = 'btn-call btn-decline';
             endBtn.innerHTML = '<i class="fa-solid fa-phone-slash"></i> Hang Up';
@@ -425,10 +442,26 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         }
     }
 
+    function updateMicStatus(msg) {
+        document.getElementById('call-mic-status').innerText = msg;
+    }
+
     function playStream(stream) {
+        remoteStreamRef = stream;
         const audio = document.getElementById('remote-audio');
         audio.srcObject = stream;
-        audio.play().catch(e => console.log("Audio play failed (interaction needed):", e));
+        
+        // Browser Autoplay Policy Hack
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.then(_ => {
+                updateMicStatus("Audio Playing (Receiving)");
+            })
+            .catch(error => {
+                updateMicStatus("Autoplay Blocked! Click 'Force Enable Audio'");
+                console.log("Audio play failed, user interaction needed.");
+            });
+        }
     }
 
     function endCall() {
@@ -437,6 +470,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         document.getElementById('call-modal').style.display = 'none';
         currentCall = null;
         localStream = null;
+        remoteStreamRef = null;
     }
 
 
@@ -516,7 +550,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             updateRoleDisplay("Connected");
             enableChat();
             
-            // SYSTEM MESSAGE REMOVED HERE
+            // SYSTEM MESSAGE REMOVED
             
             if(messageHistory.length > 0) {
                 hostConn.send({
