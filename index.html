@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ShooymCord</title>
+<title>ShooymCord V11</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
@@ -36,11 +36,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 #chat-feed { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; }
 
 /* Messages */
-.message { padding: 4px 16px; margin-top: 4px; display: flex; gap: 16px; }
+.message { padding: 4px 16px; margin-top: 4px; display: flex; gap: 16px; position: relative; }
 .message:hover { background: rgba(4, 4, 5, 0.07); }
-.avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: #555; object-fit: cover; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: #555; object-fit: cover; cursor: pointer; }
 .message-header { display: flex; align-items: baseline; gap: 8px; }
 .username { font-weight: 500; color: #fff; cursor: pointer; }
+.username:hover { text-decoration: underline; }
 .timestamp { font-size: 0.7rem; color: var(--header-secondary); }
 
 /* File Attachments */
@@ -61,6 +62,49 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 .role-client { background: var(--accent); }
 .role-offline { background: var(--red); }
 .role-migrating { background: #faa61a; color: black; } 
+
+/* CALLING UI */
+#context-menu {
+    position: fixed;
+    background: #111214;
+    border: 1px solid #2b2d31;
+    border-radius: 4px;
+    padding: 6px;
+    display: none;
+    z-index: 1000;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+    min-width: 150px;
+}
+.ctx-item {
+    padding: 8px 12px;
+    color: #dbdee1;
+    cursor: pointer;
+    border-radius: 2px;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ctx-item:hover { background: #5865f2; color: white; }
+
+#call-modal {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #1e1f22;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none;
+    z-index: 2000;
+    border: 1px solid #2b2d31;
+    width: 280px;
+}
+.call-status { font-weight: bold; margin-bottom: 12px; font-size: 1.1rem; }
+.call-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.btn-call { padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; }
+.btn-accept { background: #23a559; }
+.btn-decline { background: #fa777c; }
 
 /* Hidden Inputs */
 #pfp-upload, #file-upload { display: none; }
@@ -117,6 +161,23 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     </div>
 </main>
 
+<div id="context-menu">
+    <div class="ctx-item" id="ctx-call-btn">
+        <i class="fa-solid fa-phone"></i> Call User
+    </div>
+    <div class="ctx-item" onclick="document.getElementById('context-menu').style.display='none'">
+        <i class="fa-solid fa-xmark"></i> Close
+    </div>
+</div>
+
+<div id="call-modal">
+    <div class="call-status" id="call-text">Incoming Call...</div>
+    <div class="call-actions" id="call-buttons">
+        </div>
+</div>
+
+<audio id="remote-audio" autoplay></audio>
+
 <script>
     // --- CONFIGURATION ---
     const SHARED_SERVER_ID = "shooym-global-room-v9-chan"; 
@@ -141,6 +202,10 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     let processedIds = new Set(); 
     let isMigrating = false;
 
+    // --- CALLING STATE ---
+    let currentCall = null;
+    let localStream = null;
+
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
     let heartbeatInterval = null; 
@@ -151,10 +216,18 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     loadHistory(); 
     initPeer();
 
+    // --- GLOBAL CLICK TO CLOSE MENU ---
+    document.addEventListener('click', (e) => {
+        const menu = document.getElementById('context-menu');
+        if (menu.style.display === 'block' && !e.target.closest('.username') && !e.target.closest('.avatar') && !e.target.closest('#context-menu')) {
+            menu.style.display = 'none';
+        }
+    });
+
     // --- DEV MOD (Ctrl+Shift+J) ---
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
-            e.preventDefault(); // Stop Browser Console
+            e.preventDefault();
             openDevMod();
         }
     });
@@ -194,35 +267,23 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                     .section { margin-bottom: 20px; background: #2b2d31; padding: 15px; border-radius: 8px; }
                     ul { list-style: none; padding: 0; }
                     li { padding: 4px 0; border-bottom: 1px solid #444; }
-                    .stat { font-weight: bold; color: #fff; }
                 </style>
             </head>
             <body>
                 <h1>🛠️ Shooym Dev Panel</h1>
-                
                 <div class="section">
                     <h2>My Identity</h2>
                     <div><strong>Username:</strong> ${myName}</div>
                     <div><strong>Peer ID:</strong> ${peer ? peer.id : 'Initializing...'}</div>
-                    <div><strong>Current Role:</strong> <span style="text-transform:uppercase; color: ${myRole==='host'?'#23a559':'#5865f2'}">${myRole}</span></div>
-                    <div><strong>Channel:</strong> ${currentChannel}</div>
+                    <div><strong>Current Role:</strong> ${myRole}</div>
                 </div>
-
                 <div class="section">
                     <h2>Connection Map (${connectionCount} Active)</h2>
                     <ul>${connectionHTML}</ul>
                 </div>
-
-                <div class="section">
-                    <h2>Storage Stats</h2>
-                    <div><strong>History Count:</strong> ${messageHistory.length} messages</div>
-                    <div><strong>Processed IDs:</strong> ${processedIds.size}</div>
-                    <div><strong>Local Storage Usage:</strong> ~${(JSON.stringify(messageHistory).length / 1024).toFixed(2)} KB</div>
-                </div>
             </body>
             </html>
         `;
-
         win.document.write(htmlContent);
         win.document.close();
     }
@@ -239,6 +300,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             becomeHost(id);
         });
 
+        // 2. LISTEN FOR INCOMING CALLS
+        peer.on('call', (call) => {
+            handleIncomingCall(call);
+        });
+
         peer.on('error', (err) => {
             if(err.type === 'unavailable-id') {
                 console.log("Host exists. Switching to Client.");
@@ -248,6 +314,127 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             }
         });
     }
+
+    // --- CALLING LOGIC ---
+
+    // 1. Show Context Menu
+    function showUserMenu(e, targetPeerId, targetUsername) {
+        e.stopPropagation();
+        const menu = document.getElementById('context-menu');
+        const btn = document.getElementById('ctx-call-btn');
+
+        if (!targetPeerId || targetPeerId === 'undefined' || targetPeerId === peer.id) {
+            btn.style.opacity = '0.5';
+            btn.style.pointerEvents = 'none';
+            btn.innerHTML = `<i class="fa-solid fa-phone-slash"></i> Cannot Call`;
+        } else {
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.innerHTML = `<i class="fa-solid fa-phone"></i> Call ${targetUsername}`;
+            btn.onclick = () => initiateCall(targetPeerId, targetUsername);
+        }
+
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+
+    // 2. Start a Call
+    function initiateCall(targetPeerId, username) {
+        document.getElementById('context-menu').style.display = 'none';
+        
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+            .then((stream) => {
+                localStream = stream;
+                showCallUI(`Calling ${username}...`, true);
+                
+                const call = peer.call(targetPeerId, stream);
+                currentCall = call;
+
+                call.on('stream', (remoteStream) => {
+                    playStream(remoteStream);
+                    showCallUI(`In Call with ${username}`, true);
+                });
+
+                call.on('close', endCall);
+                call.on('error', (err) => { alert("Call Error: " + err); endCall(); });
+            })
+            .catch((err) => {
+                alert("Microphone access denied or error: " + err);
+            });
+    }
+
+    // 3. Handle Incoming Call
+    function handleIncomingCall(call) {
+        currentCall = call;
+        showCallUI(`Incoming call from ${call.peer}...`, false, () => {
+            // On Accept
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then((stream) => {
+                    localStream = stream;
+                    call.answer(stream); // Answer the call with an A/V stream.
+                    
+                    call.on('stream', (remoteStream) => {
+                        playStream(remoteStream);
+                        showCallUI("Connected", true);
+                    });
+                    
+                    call.on('close', endCall);
+                })
+                .catch(err => {
+                    alert("No Mic Access");
+                    endCall();
+                });
+        });
+    }
+
+    // 4. UI Helpers for Calls
+    function showCallUI(text, isActive, onAccept) {
+        const modal = document.getElementById('call-modal');
+        const txt = document.getElementById('call-text');
+        const btns = document.getElementById('call-buttons');
+        
+        modal.style.display = 'block';
+        txt.innerText = text;
+        btns.innerHTML = '';
+
+        if (!isActive && onAccept) {
+            // Incoming Call State
+            const acceptBtn = document.createElement('button');
+            acceptBtn.className = 'btn-call btn-accept';
+            acceptBtn.innerHTML = '<i class="fa-solid fa-phone"></i> Accept';
+            acceptBtn.onclick = onAccept;
+
+            const declineBtn = document.createElement('button');
+            declineBtn.className = 'btn-call btn-decline';
+            declineBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> Decline';
+            declineBtn.onclick = endCall;
+
+            btns.appendChild(acceptBtn);
+            btns.appendChild(declineBtn);
+        } else {
+            // In Call / Calling State
+            const endBtn = document.createElement('button');
+            endBtn.className = 'btn-call btn-decline';
+            endBtn.innerHTML = '<i class="fa-solid fa-phone-slash"></i> Hang Up';
+            endBtn.onclick = endCall;
+            btns.appendChild(endBtn);
+        }
+    }
+
+    function playStream(stream) {
+        const audio = document.getElementById('remote-audio');
+        audio.srcObject = stream;
+    }
+
+    function endCall() {
+        if(currentCall) currentCall.close();
+        if(localStream) localStream.getTracks().forEach(track => track.stop());
+        document.getElementById('call-modal').style.display = 'none';
+        currentCall = null;
+        localStream = null;
+    }
+
 
     // --- CHANNEL SWITCHING LOGIC ---
     function switchChannel(channelId) {
@@ -429,7 +616,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             msg: text,
             type: 'text',
             channel: currentChannel, 
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            peerId: peer.id // IMPORTANT: SEND MY ID SO OTHERS CAN CALL ME
         };
 
         if(isNewMessage(data.id)) {
@@ -454,7 +642,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 fileName: file.name,
                 type: file.type.includes('pdf') ? 'pdf' : 'image',
                 channel: currentChannel,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                peerId: peer.id // SEND ID
             };
             
             if(isNewMessage(data.id)) {
@@ -525,7 +714,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         
         messageHistory.forEach(msg => {
             const msgChannel = msg.channel || 'general';
-            
             if(msgChannel === currentChannel) {
                 processedIds.add(msg.id);
                 renderMessage(msg);
@@ -550,12 +738,13 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             content = `<div class="message-text" style="color:#dbdee1; line-height:1.4">${tempDiv.innerHTML}</div>`;
         }
 
+        // ADD ONCLICK TO OPEN CONTEXT MENU FOR CALLING
         const msgHTML = `
             <div class="message">
-                <img src="${avatar}" class="avatar">
+                <img src="${avatar}" class="avatar" onclick="showUserMenu(event, '${data.peerId}', '${data.user}')">
                 <div class="message-content">
                     <div class="message-header">
-                        <span class="username">${data.user}</span>
+                        <span class="username" onclick="showUserMenu(event, '${data.peerId}', '${data.user}')">${data.user}</span>
                         <span class="timestamp">${timeStr}</span>
                     </div>
                     ${content}
