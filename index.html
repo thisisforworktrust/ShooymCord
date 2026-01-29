@@ -149,7 +149,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- ADVANCED FILTRATION SYSTEM ---
     const RAW_BAD_WORDS = ["mommy", "mommy", "mommy", "mommy", "daddy", "cunt", "penis", "nigger", "dick", "chink"];
-
     const LEET_MAP = {
       a: '[aA@4^/\\\\]', b: '[bB8|3]', c: '[cC{(<\\[]', d: '[dD|)\\>]',
       e: '[eE3]', f: '[fFph]', g: '[gG69]', h: '[hH#\\-|]',
@@ -189,6 +188,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     let messageHistory = [];
     let processedIds = new Set(); 
     let isMigrating = false;
+
+    // ** IMPORTANT: LOCK STATE **
+    let isLocked = false; 
 
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
@@ -318,16 +320,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         win.document.close(); 
     }
 
-    // --- DEV MOD (Ctrl+Shift+J) ---
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.shiftKey && (e.key === 'J' || e.key === 'j')) {
-            e.preventDefault(); 
-            openDevMod();
-        }
-    });
-
-    function openDevMod() { /* Standard dev mode logic omitted for brevity */ }
-
     // --- PEER INITIALIZATION ---
     function initPeer() {
         if(isMigrating) return;
@@ -369,7 +361,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         document.getElementById('header-channel-name').innerText = displayName;
         
         const input = document.getElementById('msg-input');
-        if(!input.disabled) {
+        
+        // ** FIXED LOCK LOGIC **
+        if(isLocked) {
+             input.disabled = true;
+             input.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
+        } else if(!input.disabled) {
             input.placeholder = `Message #${displayName}`;
         }
         reRenderAllMessages();
@@ -414,6 +411,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         peer.on('connection', (conn) => {
             connections.push(conn);
             conn.on('open', () => {
+                // Only send history if not wiped/empty
                 if(messageHistory.length > 0) {
                     messageHistory.forEach(msg => {
                         if(msg.type !== 'dm') conn.send(msg);
@@ -426,7 +424,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 // --- ADMIN INTERCEPTOR (HOST) ---
                 if (data.type === 'admin-cmd') {
                     handleAdminData(data);
-                    return; // Stop processing, don't save as chat
+                    return; 
                 }
 
                 if(data.type === 'dm') {
@@ -508,44 +506,52 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         peer.on('error', () => handleHostDisconnect());
     }
 
-    // --- ADMIN HANDLER ---
+    // --- ADMIN HANDLER (FIXED) ---
     function handleAdminData(data) {
         console.log("ADMIN CMD:", data.action);
 
+        // 1. If I am Host, BROADCAST FIRST before doing anything locally
+        // This ensures clients get the command even if the Host's browser freezes on an alert.
+        if (myRole === 'host') {
+            broadcast(data);
+        }
+
+        // 2. Execute Local Action
         if (data.action === 'wipe') {
-            // 1. Clear array
+            // FIX: Effectively clear everything
             messageHistory = [];
-            processedIds = new Set();
-            // 2. Clear storage
+            processedIds.clear();
             localStorage.removeItem(STORAGE_KEY);
-            // 3. Clear UI
+            
             document.getElementById('chat-feed').innerHTML = '';
-            // 4. Show note
+            
             const note = document.createElement('div');
             note.style.cssText = "color: #fa777c; text-align: center; padding: 10px; border: 1px dashed #fa777c; margin: 10px;";
             note.innerText = "⚠️ SYSTEM WIPED BY ADMIN ⚠️";
             document.getElementById('chat-feed').appendChild(note);
         }
         else if (data.action === 'alert') {
-            alert("📢 SYSTEM ALERT:\n\n" + data.payload);
+            // FIX: Use setTimeout so alert() doesn't block the network stack
+            setTimeout(() => {
+                alert("📢 SYSTEM ALERT:\n\n" + data.payload);
+            }, 50);
         }
         else if (data.action === 'force-refresh') {
             location.reload();
         }
         else if (data.action === 'lock') {
+            // FIX: Set global state
+            isLocked = true;
             const inp = document.getElementById('msg-input');
             inp.disabled = true;
             inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
         }
         else if (data.action === 'unlock') {
+            // FIX: Reset global state
+            isLocked = false;
             const inp = document.getElementById('msg-input');
             inp.disabled = false;
             inp.placeholder = `Message #${currentChannel}`;
-        }
-
-        // If I am the Host, relay this command to all other clients
-        if (myRole === 'host') {
-            broadcast(data);
         }
     }
 
@@ -631,20 +637,20 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         }
     }
 
-    // --- FILTER HELPER FUNCTION (UPDATED) ---
+    // --- FILTER HELPER FUNCTION ---
     function filterText(text) {
         if(!text) return "";
         let cleanText = text;
-        
-        // Loop through our generated Smart Regexes
         SMART_FILTERS.forEach(regex => {
             cleanText = cleanText.replace(regex, (match) => "*".repeat(match.length));
         });
-        
         return cleanText;
     }
 
     function sendMessage() {
+        // FIX: Prevent sending if locked
+        if(isLocked) return;
+
         const input = document.getElementById('msg-input');
         let text = input.value.trim();
         if (!text) return;
@@ -682,6 +688,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function handleFileUpload(input) {
+        // FIX: Prevent upload if locked
+        if(isLocked) return;
+
         const file = input.files[0];
         if (!file) return;
         if (file.size > 2000000) { alert("File too big! Limit is 2MB."); return; }
@@ -847,8 +856,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     function enableChat() {
         const inp = document.getElementById('msg-input');
-        inp.disabled = false;
-        inp.placeholder = `Message #${currentChannel}`;
+        // FIX: Respect lock state
+        if(isLocked) {
+             inp.disabled = true;
+             inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
+        } else {
+            inp.disabled = false;
+            inp.placeholder = `Message #${currentChannel}`;
+        }
     }
     
     function disableChat() {
