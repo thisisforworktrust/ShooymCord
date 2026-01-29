@@ -63,14 +63,14 @@ function handleAdminData(data) {
         const feed = document.getElementById('chat-feed');
         const div = document.createElement('div');
         div.style.cssText = "color: #faa61a; text-align: center; font-size: 0.8rem; padding: 5px; background: #222; margin: 5px 0;";
-        div.innerText = "🐢 SLOW MODE ENABLED";
+        div.innerText = "☃ snowman";
         feed.appendChild(div);
     }
     else if (data.action === 'slowmode-off') {
         const feed = document.getElementById('chat-feed');
         const div = document.createElement('div');
         div.style.cssText = "color: #23a559; text-align: center; font-size: 0.8rem; padding: 5px; background: #222; margin: 5px 0;";
-        div.innerText = "🐇 SLOW MODE DISABLED";
+        div.innerText = "☃ 2 snowman";
         feed.appendChild(div);
     }
 }
