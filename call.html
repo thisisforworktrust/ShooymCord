@@ -13,17 +13,14 @@
     
     /* Header Styles */
     .header { height: 48px; background: var(--bg-secondary); border-bottom: 1px solid #1f2023; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-weight: bold; -webkit-app-region: drag; }
-    
     .status-group { display: flex; align-items: center; gap: 16px; }
     .status-indicator { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
-    
-    /* Timer Style */
     .timer-badge { font-family: monospace; font-size: 1rem; color: var(--text-normal); background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; }
-    
     .ping-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
     .ping-dot.connecting { background: #faa61a; }
     .ping-dot.offline { background: var(--red); }
     
+    /* Grid & User Styles */
     .voice-grid { flex: 1; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; align-content: flex-start; overflow-y: auto; }
     .voice-user { background: var(--bg-secondary); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; border: 2px solid transparent; transition: 0.2s; }
     .voice-user.speaking { border-color: var(--green); }
@@ -31,6 +28,7 @@
     .avatar { width: 100%; height: 100%; border-radius: 50%; background: #555; object-fit: cover; }
     .username { font-weight: bold; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
     
+    /* Controls */
     .controls { height: 80px; background: #1e1f22; display: flex; align-items: center; justify-content: center; gap: 24px; padding-bottom: 10px; position: relative; z-index: 10; }
     .control-btn { width: 56px; height: 56px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; color: white; }
     .btn-normal { background: var(--bg-secondary); color: var(--text-normal); }
@@ -43,34 +41,18 @@
     /* SPINNING BEEF STYLES */
     @keyframes spin { 100% { transform: rotate(360deg); } }
     .spinning-beef {
-        position: fixed;
-        bottom: 20px;
-        left: 20px;
-        width: 100px;
-        height: auto;
-        animation: spin 4s linear infinite;
-        /* UPDATED Z-INDEX TO 100 SO IT IS ON TOP OF CONTROLS */
-        z-index: 100; 
-        pointer-events: none; 
+        position: fixed; bottom: 20px; left: 20px; width: 100px; height: auto;
+        animation: spin 4s linear infinite; z-index: 100; pointer-events: none; 
     }
 </style>
 </head>
 <body>
+
     <div class="header">
-        <div class="status-indicator">
-            <i class="fa-solid fa-volume-high"></i> 
-            <span>General</span>
-        </div>
-        
+        <div class="status-indicator"><i class="fa-solid fa-volume-high"></i> <span>General</span></div>
         <div class="status-group">
-            <div class="status-indicator">
-                <span id="call-timer" class="timer-badge">00:00</span>
-            </div>
-            
-            <div class="status-indicator">
-                <div id="status-dot" class="ping-dot offline"></div>
-                <span id="connection-status">Ready</span>
-            </div>
+            <div class="status-indicator"><span id="call-timer" class="timer-badge">00:00</span></div>
+            <div class="status-indicator"><div id="status-dot" class="ping-dot offline"></div><span id="connection-status">Ready</span></div>
         </div>
     </div>
 
@@ -90,19 +72,37 @@
     let peer, localStream, connectedPeers = new Set(), isMuted = false;
     let callTimerInterval;
     
+    // Default Profile (Only Name)
+    let myProfile = { name: "Guest" };
+
     const statusDot = document.getElementById("status-dot"), 
           statusText = document.getElementById("connection-status"), 
           userGrid = document.getElementById("user-grid"), 
           muteBtn = document.getElementById("btn-mute"),
           timerEl = document.getElementById("call-timer");
     
-    window.onload = startCall;
+    // --- AUTOMATIC LOGIN LOGIC (NAME ONLY) ---
+    window.onload = function() {
+        // 1. Try to get data from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlUser = urlParams.get('username');
+        
+        // Only set name, ignore pfp
+        if (urlUser) myProfile.name = urlUser;
+
+        // 2. Fallback: Try LocalStorage
+        if (!urlUser && localStorage.getItem('shooym_username')) {
+            myProfile.name = localStorage.getItem('shooym_username');
+        }
+
+        startCall();
+    };
     
     async function startCall() {
         statusDot.className = "ping-dot connecting"; statusText.innerText = "Connecting...";
         try { 
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); 
-            addUser("You", true); 
+            addUser("You", true, myProfile); 
             initPeer(); 
         } catch (err) { 
             statusText.innerText = "Mic Denied"; 
@@ -120,31 +120,52 @@
                 peer.on("open", id => { setConnectedState(); setupClient(); }); 
             } 
         });
+        // Listen for profile data
+        peer.on("connection", handleDataConnection);
+    }
+
+    function handleDataConnection(conn) {
+        conn.on("open", () => {
+            conn.send({ type: 'profile', user: myProfile });
+        });
+        conn.on("data", data => {
+            if(data.type === 'profile') {
+                updateUserProfile(conn.peer, data.user);
+            }
+            if(data.type === 'peers') {
+                data.peers.forEach(id => { 
+                    if (id !== peer.id) { 
+                        const call = peer.call(id, localStream, { metadata: myProfile });
+                        attachAudio(call); 
+                    } 
+                }); 
+            }
+        });
     }
 
     function setupHost() {
         peer.on("call", call => { call.answer(localStream); attachAudio(call); });
         peer.on("connection", conn => { 
-            connectedPeers.add(conn.peer); 
-            setTimeout(() => { conn.send({ peers: [...connectedPeers] }); }, 500); 
+            connectedPeers.add(conn.peer);
+            handleDataConnection(conn);
+            setTimeout(() => { conn.send({ type: 'peers', peers: [...connectedPeers] }); }, 500); 
             conn.on("close", () => { connectedPeers.delete(conn.peer); removeUser(conn.peer); }); 
         });
     }
 
     function setupClient() {
         const conn = peer.connect(ROOM_ID);
-        conn.on("open", () => { const hostCall = peer.call(ROOM_ID, localStream); attachAudio(hostCall); });
-        conn.on("data", data => { 
-            if (data.peers) { 
-                data.peers.forEach(id => { 
-                    if (id !== peer.id) { attachAudio(peer.call(id, localStream)); } 
-                }); 
-            } 
+        handleDataConnection(conn);
+        conn.on("open", () => {
+            const hostCall = peer.call(ROOM_ID, localStream, { metadata: myProfile });
+            attachAudio(hostCall);
         });
         peer.on("call", call => { call.answer(localStream); attachAudio(call); });
     }
 
     function attachAudio(call) {
+        if(call.metadata) updateUserProfile(call.peer, call.metadata);
+
         call.on("stream", stream => {
             if (document.getElementById("audio-" + call.peer)) return;
             const audio = document.createElement("audio"); 
@@ -153,8 +174,14 @@
             audio.playsInline = true; 
             document.getElementById("audio-grid").appendChild(audio); 
             audio.play().catch(e=>{});
-            addUser(call.peer, false); 
+            
+            addUser(call.peer, false, call.metadata || null); 
             setupVAD(stream, call.peer);
+
+            if(!call.metadata) { 
+                const infoConn = peer.connect(call.peer);
+                handleDataConnection(infoConn);
+            }
         });
         call.on("close", () => removeUser(call.peer));
     }
@@ -184,30 +211,54 @@
     function startTimer() {
         let seconds = 0;
         if(callTimerInterval) clearInterval(callTimerInterval);
-        
         callTimerInterval = setInterval(() => {
             seconds++;
             const hrs = Math.floor(seconds / 3600);
             const mins = Math.floor((seconds % 3600) / 60);
             const secs = seconds % 60;
-            
             let timeString = "";
             if(hrs > 0) timeString += hrs + ":";
             timeString += (mins < 10 ? "0" : "") + mins + ":";
             timeString += (secs < 10 ? "0" : "") + secs;
-            
             timerEl.innerText = timeString;
         }, 1000);
     }
     
-    function addUser(id, isSelf) {
-        if(document.getElementById("ui-" + id)) return;
-        const safeName = isSelf ? "You" : id.substring(0, 5);
+    function addUser(id, isSelf, profile) {
+        if(document.getElementById("ui-" + id)) {
+            if(profile) updateUserProfile(id, profile);
+            return;
+        }
+
+        // AUTO-GENERATED PFP LOGIC
+        // We always use the name to generate the avatar now
+        let displayName = profile?.name || (isSelf ? "You" : id.substring(0, 5));
+        let displayPfp = `https://ui-avatars.com/api/?name=${displayName}&background=random`;
+
         const div = document.createElement("div"); 
         div.className = "voice-user"; 
         div.id = "ui-" + id;
-        div.innerHTML = `<div class="avatar-wrapper"><img src="https://ui-avatars.com/api/?name=${safeName}&background=random" class="avatar"></div><div class="username">${safeName}</div>`;
+        div.innerHTML = `
+            <div class="avatar-wrapper">
+                <img src="${displayPfp}" class="avatar" id="img-${id}">
+            </div>
+            <div class="username" id="name-${id}">${displayName}</div>
+        `;
         userGrid.appendChild(div);
+    }
+
+    function updateUserProfile(id, profile) {
+        const nameEl = document.getElementById("name-" + id);
+        const imgEl = document.getElementById("img-" + id);
+        
+        // Update Name
+        if(nameEl && profile.name) {
+            nameEl.innerText = profile.name;
+            // Also update the avatar to match the new name
+            if(imgEl) {
+                imgEl.src = `https://ui-avatars.com/api/?name=${profile.name}&background=random`;
+            }
+        }
     }
 
     function removeUser(id) { 
