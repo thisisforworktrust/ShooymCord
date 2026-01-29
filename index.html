@@ -141,6 +141,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     </div>
 </main>
 
+<script src="admin.js"></script>
+
 <script>
     // --- CONFIGURATION ---
     const SHARED_SERVER_ID = "shooym-global-room-v9-chan"; 
@@ -195,7 +197,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
     let heartbeatInterval = null; 
-    let monitorInterval = null;      
+    let monitorInterval = null;       
 
     // --- INITIALIZATION ---
     updateUI();
@@ -203,14 +205,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     initPeer();
 
     function openVoiceWindow() {
-        // Opens the separate call.html file in a popup window
         window.open("call.html", "ShooymVoice", "width=380,height=600,menubar=no,toolbar=no,location=no");
-        if (!win) { 
-            alert("Please allow pop-ups to start a voice call.");
-    }
-
-        win.document.write(VOICE_HTML); 
-        win.document.close(); 
     }
 
     // --- PEER INITIALIZATION ---
@@ -253,15 +248,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         document.getElementById('header-symbol').innerText = '#';
         document.getElementById('header-channel-name').innerText = displayName;
         
-        const input = document.getElementById('msg-input');
-        
-        // ** FIXED LOCK LOGIC **
-        if(isLocked) {
-             input.disabled = true;
-             input.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
-        } else if(!input.disabled) {
-            input.placeholder = `Message #${displayName}`;
-        }
+        updateInputState();
         reRenderAllMessages();
     }
 
@@ -287,9 +274,20 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
         document.getElementById('header-symbol').innerText = '@';
         document.getElementById('header-channel-name').innerText = targetName;
-        document.getElementById('msg-input').placeholder = `Message @${targetName}`;
-
+        
+        updateInputState();
         reRenderAllMessages();
+    }
+
+    function updateInputState() {
+        const inp = document.getElementById('msg-input');
+        if(isLocked) {
+             inp.disabled = true;
+             inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
+        } else {
+            inp.disabled = false;
+            inp.placeholder = `Message ${currentChannel === 'dm' ? '@' + currentDMName : '#' + currentChannel}`;
+        }
     }
 
     // --- HOST LOGIC ---
@@ -316,7 +314,10 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 
                 // --- ADMIN INTERCEPTOR (HOST) ---
                 if (data.type === 'admin-cmd') {
-                    handleAdminData(data);
+                    // Call the function from admin.js
+                    if (typeof handleAdminData === "function") {
+                        handleAdminData(data);
+                    }
                     return; 
                 }
 
@@ -384,7 +385,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             }
             // --- ADMIN INTERCEPTOR (CLIENT) ---
             if (data.type === 'admin-cmd') {
-                handleAdminData(data);
+                if (typeof handleAdminData === "function") {
+                    handleAdminData(data);
+                }
                 return; 
             }
             if (isNewMessage(data.id)) {
@@ -397,55 +400,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         });
         
         peer.on('error', () => handleHostDisconnect());
-    }
-
-    // --- ADMIN HANDLER (FIXED) ---
-    function handleAdminData(data) {
-        console.log("ADMIN CMD:", data.action);
-
-        // 1. If I am Host, BROADCAST FIRST before doing anything locally
-        // This ensures clients get the command even if the Host's browser freezes on an alert.
-        if (myRole === 'host') {
-            broadcast(data);
-        }
-
-        // 2. Execute Local Action
-        if (data.action === 'wipe') {
-            // FIX: Effectively clear everything
-            messageHistory = [];
-            processedIds.clear();
-            localStorage.removeItem(STORAGE_KEY);
-            
-            document.getElementById('chat-feed').innerHTML = '';
-            
-            const note = document.createElement('div');
-            note.style.cssText = "color: #fa777c; text-align: center; padding: 10px; border: 1px dashed #fa777c; margin: 10px;";
-            note.innerText = "⚠️ SYSTEM WIPED BY ADMIN ⚠️";
-            document.getElementById('chat-feed').appendChild(note);
-        }
-        else if (data.action === 'alert') {
-            // FIX: Use setTimeout so alert() doesn't block the network stack
-            setTimeout(() => {
-                alert("📢 SYSTEM ALERT:\n\n" + data.payload);
-            }, 50);
-        }
-        else if (data.action === 'force-refresh') {
-            location.reload();
-        }
-        else if (data.action === 'lock') {
-            // FIX: Set global state
-            isLocked = true;
-            const inp = document.getElementById('msg-input');
-            inp.disabled = true;
-            inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
-        }
-        else if (data.action === 'unlock') {
-            // FIX: Reset global state
-            isLocked = false;
-            const inp = document.getElementById('msg-input');
-            inp.disabled = false;
-            inp.placeholder = `Message #${currentChannel}`;
-        }
     }
 
     // --- MERGE LOGIC ---
@@ -748,15 +702,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function enableChat() {
-        const inp = document.getElementById('msg-input');
-        // FIX: Respect lock state
-        if(isLocked) {
-             inp.disabled = true;
-             inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
-        } else {
-            inp.disabled = false;
-            inp.placeholder = `Message #${currentChannel}`;
-        }
+        updateInputState();
     }
     
     function disableChat() {
