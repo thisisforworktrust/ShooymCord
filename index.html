@@ -33,6 +33,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); position: relative; }
 .chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 0 rgba(4,4,5,0.2); font-weight: bold; color: var(--header-primary); }
+.header-left { display: flex; align-items: center; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+
 #chat-feed { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; }
 
 /* Messages */
@@ -55,12 +58,15 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 .btn-icon { background: none; border: none; color: #b5bac1; cursor: pointer; font-size: 1.2rem; transition: color 0.2s; }
 .btn-icon:hover { color: var(--text-normal); }
 
-/* Role Badge */
+/* Buttons & Badges */
 #role-badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; color: white; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
 .role-host { background: var(--green); }
 .role-client { background: var(--accent); }
 .role-offline { background: var(--red); }
 .role-migrating { background: #faa61a; color: black; } 
+
+.call-btn { color: var(--header-secondary); cursor: pointer; font-size: 1.2rem; transition: 0.2s; background: none; border: none; }
+.call-btn:hover { color: var(--header-primary); }
 
 /* Hidden Inputs */
 #pfp-upload, #file-upload { display: none; }
@@ -69,7 +75,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 <body>
 
 <nav class="servers">
-    <div class="server-icon active"><i class="fa-brands fa-discord"></i></div>
+    <div class="server-icon active">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM11 7H13V9H14C15.1 9 16 9.9 16 11V15C16 16.1 15.1 17 14 17H11V19H9V17H8C6.9 17 6 16.1 6 15V11C6 9.9 6.9 9 8 9H11V7Z" fill="currentColor"/>
+        </svg>
+    </div>
 </nav>
 
 <div class="channels">
@@ -98,8 +108,17 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 <main class="chat-area">
     <header class="chat-header">
-        <div><span style="color:var(--header-secondary); margin-right: 4px;">#</span> <span id="header-channel-name">general</span></div>
-        <div id="role-badge" class="role-offline">Starting...</div>
+        <div class="header-left">
+            <span style="color:var(--header-secondary); margin-right: 4px;">#</span> 
+            <span id="header-channel-name">general</span>
+        </div>
+        
+        <div class="header-right">
+            <button class="call-btn" onclick="openVoiceWindow()" title="Start Voice Call">
+                <i class="fa-solid fa-phone"></i>
+            </button>
+            <div id="role-badge" class="role-offline">Starting...</div>
+        </div>
     </header>
 
     <div id="chat-feed"></div>
@@ -144,12 +163,131 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
     let heartbeatInterval = null; 
-    let monitorInterval = null;   
+    let monitorInterval = null;    
 
     // --- INITIALIZATION ---
     updateUI();
     loadHistory(); 
     initPeer();
+
+    // --- VOICE CHAT WINDOW LOGIC ---
+    // This is the code for the popup window
+    const VOICE_HTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shooym Voice</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"><\/script>
+<style>
+    :root { --bg-tertiary: #1e1f22; --bg-secondary: #2b2d31; --bg-primary: #313338; --text-normal: #dbdee1; --accent: #5865f2; --green: #23a559; --red: #fa777c; --control-bg: #2b2d31; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font-family: 'gg sans', sans-serif; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    .header { height: 48px; background: var(--bg-secondary); border-bottom: 1px solid #1f2023; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-weight: bold; -webkit-app-region: drag; }
+    .status-indicator { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
+    .ping-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
+    .ping-dot.connecting { background: #faa61a; }
+    .ping-dot.offline { background: var(--red); }
+    .voice-grid { flex: 1; padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; align-content: flex-start; overflow-y: auto; }
+    .voice-user { background: var(--bg-secondary); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; border: 2px solid transparent; transition: 0.2s; }
+    .voice-user.speaking { border-color: var(--green); }
+    .avatar-wrapper { position: relative; width: 64px; height: 64px; margin-bottom: 8px; }
+    .avatar { width: 100%; height: 100%; border-radius: 50%; background: #555; object-fit: cover; }
+    .username { font-weight: bold; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .controls { height: 80px; background: #1e1f22; display: flex; align-items: center; justify-content: center; gap: 24px; padding-bottom: 10px; }
+    .control-btn { width: 56px; height: 56px; border-radius: 50%; border: none; font-size: 20px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; color: white; }
+    .btn-normal { background: var(--bg-secondary); color: var(--text-normal); }
+    .btn-normal:hover { background: #3f4147; }
+    .btn-active { background: white; color: black; }
+    .btn-disconnect { background: var(--red); }
+    .btn-disconnect:hover { background: #d8454b; }
+    #audio-grid { display: none; }
+</style>
+</head>
+<body>
+    <div class="header">
+        <div class="status-indicator"><i class="fa-solid fa-volume-high"></i> <span>General</span></div>
+        <div class="status-indicator"><div id="status-dot" class="ping-dot offline"></div><span id="connection-status">Ready</span></div>
+    </div>
+    <div class="voice-grid" id="user-grid"></div>
+    <div class="controls">
+        <button id="btn-mute" class="control-btn btn-normal" onclick="toggleMute()"><i class="fa-solid fa-microphone"></i></button>
+        <button id="btn-hangup" class="control-btn btn-disconnect" onclick="hangUp()"><i class="fa-solid fa-phone-slash"></i></button>
+    </div>
+    <div id="audio-grid"></div>
+    <script>
+    const ROOM_ID = "shooym-voice-general-v1";
+    let peer, localStream, connectedPeers = new Set(), isMuted = false;
+    const statusDot = document.getElementById("status-dot"), statusText = document.getElementById("connection-status"), userGrid = document.getElementById("user-grid"), muteBtn = document.getElementById("btn-mute");
+    window.onload = startCall;
+    async function startCall() {
+        statusDot.className = "ping-dot connecting"; statusText.innerText = "Connecting...";
+        try { localStream = await navigator.mediaDevices.getUserMedia({ audio: true }); addUser("You", true); initPeer(); }
+        catch (err) { statusText.innerText = "Mic Denied"; statusDot.className = "ping-dot offline"; alert("Mic required."); }
+    }
+    function initPeer() {
+        peer = new Peer(ROOM_ID);
+        peer.on("open", id => { setConnectedState(); setupHost(); });
+        peer.on("error", err => { if (err.type === "unavailable-id") { peer = new Peer(); peer.on("open", id => { setConnectedState(); setupClient(); }); } });
+    }
+    function setupHost() {
+        peer.on("call", call => { call.answer(localStream); attachAudio(call); });
+        peer.on("connection", conn => { connectedPeers.add(conn.peer); setTimeout(() => { conn.send({ peers: [...connectedPeers] }); }, 500); conn.on("close", () => { connectedPeers.delete(conn.peer); removeUser(conn.peer); }); });
+    }
+    function setupClient() {
+        const conn = peer.connect(ROOM_ID);
+        conn.on("open", () => { const hostCall = peer.call(ROOM_ID, localStream); attachAudio(hostCall); });
+        conn.on("data", data => { if (data.peers) { data.peers.forEach(id => { if (id !== peer.id) { attachAudio(peer.call(id, localStream)); } }); } });
+        peer.on("call", call => { call.answer(localStream); attachAudio(call); });
+    }
+    function attachAudio(call) {
+        call.on("stream", stream => {
+            if (document.getElementById("audio-" + call.peer)) return;
+            const audio = document.createElement("audio"); audio.id = "audio-" + call.peer; audio.srcObject = stream; audio.playsInline = true; document.getElementById("audio-grid").appendChild(audio); audio.play().catch(e=>{});
+            addUser(call.peer, false); setupVAD(stream, call.peer);
+        });
+        call.on("close", () => removeUser(call.peer));
+    }
+    function setupVAD(stream, id) {
+        const ctx = new AudioContext(), src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(2048, 1, 1);
+        src.connect(proc); proc.connect(ctx.destination);
+        proc.onaudioprocess = e => {
+            const input = e.inputBuffer.getChannelData(0); let sum = 0;
+            for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+            const el = document.getElementById("ui-" + id);
+            if(el) { if(Math.sqrt(sum / input.length) > 0.02) el.classList.add("speaking"); else el.classList.remove("speaking"); }
+        };
+    }
+    function setConnectedState() { statusDot.className = "ping-dot"; statusText.innerText = "Connected"; }
+    function addUser(id, isSelf) {
+        if(document.getElementById("ui-" + id)) return;
+        const safeName = isSelf ? "You" : id.substring(0, 5);
+        const div = document.createElement("div"); div.className = "voice-user"; div.id = "ui-" + id;
+        div.innerHTML = \`<div class="avatar-wrapper"><img src="https://ui-avatars.com/api/?name=\${safeName}&background=random" class="avatar"></div><div class="username">\${safeName}</div>\`;
+        userGrid.appendChild(div);
+    }
+    function removeUser(id) { document.getElementById("ui-" + id)?.remove(); document.getElementById("audio-" + id)?.remove(); }
+    function toggleMute() {
+        if(!localStream) return; isMuted = !isMuted; localStream.getAudioTracks()[0].enabled = !isMuted;
+        muteBtn.innerHTML = isMuted ? '<i class="fa-solid fa-microphone-slash"></i>' : '<i class="fa-solid fa-microphone"></i>';
+        if(isMuted) muteBtn.classList.add("btn-active"); else muteBtn.classList.remove("btn-active");
+    }
+    function hangUp() { if(localStream) localStream.getTracks().forEach(t=>t.stop()); if(peer) peer.destroy(); window.close(); document.body.innerHTML = "<h2 style='text-align:center;color:#fff;margin-top:20px'>Ended</h2>"; }
+    <\/script>
+</body>
+</html>`;
+
+    function openVoiceWindow() {
+        const win = window.open("", "ShooymVoice", "width=380,height=600,menubar=no,toolbar=no,location=no");
+        if (!win) {
+            alert("Please allow pop-ups to start a voice call.");
+            return;
+        }
+        win.document.write(VOICE_HTML);
+        win.document.close();
+    }
 
     // --- DEV MOD (Ctrl+Shift+J) ---
     document.addEventListener('keydown', (e) => {
@@ -257,7 +395,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         if(channelId === 'general') document.getElementById('chan-general').classList.add('active');
         if(channelId === 'cheating') document.getElementById('chan-cheating').classList.add('active');
         
-        const displayName = channelId === 'general' ? 'general' : 'cheating genreal';
+        const displayName = channelId === 'general' ? 'general' : 'cheating general';
         document.getElementById('header-channel-name').innerText = displayName;
         
         if(!document.getElementById('msg-input').disabled) {
@@ -571,7 +709,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     function enableChat() { 
         msgInput.disabled = false; 
-        const displayName = currentChannel === 'general' ? 'general' : 'cheating genreal';
+        const displayName = currentChannel === 'general' ? 'general' : 'cheating general';
         msgInput.placeholder = `Message #${displayName}`; 
     }
     function disableChat() { msgInput.disabled = true; msgInput.placeholder = "Searching for connection..."; }
