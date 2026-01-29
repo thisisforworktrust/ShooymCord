@@ -148,49 +148,25 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     const PFP_KEY = "shooym_pfp_v1";
 
     // --- ADVANCED FILTRATION SYSTEM ---
-    // 1. Define bad words here (Base form only)
     const RAW_BAD_WORDS = ["mommy", "mommy", "mommy", "mommy", "daddy", "cunt", "penis", "nigger", "dick", "chink"];
 
-    // MAXED ASCII-ONLY Leet Speak Map
-const LEET_MAP = {
-  a: '[aA@4^/\\\\]',
-  b: '[bB8|3]',
-  c: '[cC{(<\\[]',
-  d: '[dD|)\\>]',
-  e: '[eE3]',
-  f: '[fFph]',
-  g: '[gG69]',
-  h: '[hH#\\-|]',
-  i: '[iI1!|l]',
-  j: '[jJ]',
-  k: '[kK|<]',
-  l: '[lL1|!]',
-  m: '[mM\\^\\^]',
-  n: '[nN]',
-  o: '[oO0]',
-  p: '[pP9]',
-  q: '[qQ9]',
-  r: '[rR]',
-  s: '[sS5$]',
-  t: '[tT7+]',
-  u: '[uUvV]',
-  v: '[vV\\\\/]',
-  w: '[wWvvVV]',
-  x: '[xX%*]',
-  y: '[yY]',
-  z: '[zZ2]'
-};
+    const LEET_MAP = {
+      a: '[aA@4^/\\\\]', b: '[bB8|3]', c: '[cC{(<\\[]', d: '[dD|)\\>]',
+      e: '[eE3]', f: '[fFph]', g: '[gG69]', h: '[hH#\\-|]',
+      i: '[iI1!|l]', j: '[jJ]', k: '[kK|<]', l: '[lL1|!]',
+      m: '[mM\\^\\^]', n: '[nN]', o: '[oO0]', p: '[pP9]',
+      q: '[qQ9]', r: '[rR]', s: '[sS5$]', t: '[tT7+]',
+      u: '[uUvV]', v: '[vV\\\\/]', w: '[wWvvVV]', x: '[xX%*]',
+      y: '[yY]', z: '[zZ2]'
+    };
 
-
-    // 3. Generate Smart Regexes
+    // Generate Smart Regexes
     const SMART_FILTERS = RAW_BAD_WORDS.map(word => {
         let pattern = "";
         for (let char of word.toLowerCase()) {
-            // Get leet options or default char, allow multiple occurrences (+)
             const sub = LEET_MAP[char] || char;
-            pattern += sub + "+"; // + allows "baaaad"
+            pattern += sub + "+";
         }
-        // Create global case-insensitive regex
         return new RegExp(pattern, "gi");
     });
 
@@ -204,12 +180,12 @@ const LEET_MAP = {
 
     let currentChannel = "general"; 
     let currentDMTarget = null; 
-    let currentDMName = null;   
+    let currentDMName = null;    
 
     let peer = null;
     let myRole = "offline"; 
-    let connections = [];   
-    let hostConn = null;    
+    let connections = [];    
+    let hostConn = null;     
     let messageHistory = [];
     let processedIds = new Set(); 
     let isMigrating = false;
@@ -217,7 +193,7 @@ const LEET_MAP = {
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
     let heartbeatInterval = null; 
-    let monitorInterval = null;     
+    let monitorInterval = null;      
 
     // --- INITIALIZATION ---
     updateUI();
@@ -392,8 +368,9 @@ const LEET_MAP = {
         document.getElementById('header-symbol').innerText = '#';
         document.getElementById('header-channel-name').innerText = displayName;
         
-        if(!document.getElementById('msg-input').disabled) {
-            document.getElementById('msg-input').placeholder = `Message #${displayName}`;
+        const input = document.getElementById('msg-input');
+        if(!input.disabled) {
+            input.placeholder = `Message #${displayName}`;
         }
         reRenderAllMessages();
     }
@@ -446,6 +423,12 @@ const LEET_MAP = {
             conn.on('data', (data) => {
                 if(data.type === 'ping') return;
                 
+                // --- ADMIN INTERCEPTOR (HOST) ---
+                if (data.type === 'admin-cmd') {
+                    handleAdminData(data);
+                    return; // Stop processing, don't save as chat
+                }
+
                 if(data.type === 'dm') {
                     if(isNewMessage(data.id)) {
                         processIncomingData(data); 
@@ -508,6 +491,11 @@ const LEET_MAP = {
                 lastHeartbeat = Date.now();
                 return;
             }
+            // --- ADMIN INTERCEPTOR (CLIENT) ---
+            if (data.type === 'admin-cmd') {
+                handleAdminData(data);
+                return; 
+            }
             if (isNewMessage(data.id)) {
                 processIncomingData(data);
             }
@@ -518,6 +506,47 @@ const LEET_MAP = {
         });
         
         peer.on('error', () => handleHostDisconnect());
+    }
+
+    // --- ADMIN HANDLER ---
+    function handleAdminData(data) {
+        console.log("ADMIN CMD:", data.action);
+
+        if (data.action === 'wipe') {
+            // 1. Clear array
+            messageHistory = [];
+            processedIds = new Set();
+            // 2. Clear storage
+            localStorage.removeItem(STORAGE_KEY);
+            // 3. Clear UI
+            document.getElementById('chat-feed').innerHTML = '';
+            // 4. Show note
+            const note = document.createElement('div');
+            note.style.cssText = "color: #fa777c; text-align: center; padding: 10px; border: 1px dashed #fa777c; margin: 10px;";
+            note.innerText = "⚠️ SYSTEM WIPED BY ADMIN ⚠️";
+            document.getElementById('chat-feed').appendChild(note);
+        }
+        else if (data.action === 'alert') {
+            alert("📢 SYSTEM ALERT:\n\n" + data.payload);
+        }
+        else if (data.action === 'force-refresh') {
+            location.reload();
+        }
+        else if (data.action === 'lock') {
+            const inp = document.getElementById('msg-input');
+            inp.disabled = true;
+            inp.placeholder = "🔒 CHANNEL LOCKED BY ADMIN";
+        }
+        else if (data.action === 'unlock') {
+            const inp = document.getElementById('msg-input');
+            inp.disabled = false;
+            inp.placeholder = `Message #${currentChannel}`;
+        }
+
+        // If I am the Host, relay this command to all other clients
+        if (myRole === 'host') {
+            broadcast(data);
+        }
     }
 
     // --- MERGE LOGIC ---
@@ -616,7 +645,8 @@ const LEET_MAP = {
     }
 
     function sendMessage() {
-        let text = msgInput.value.trim();
+        const input = document.getElementById('msg-input');
+        let text = input.value.trim();
         if (!text) return;
         
         // Filter locally before sending
@@ -638,8 +668,8 @@ const LEET_MAP = {
             if(isNewMessage(data.id)) {
                 processIncomingData(data); // Host stores first
                 if(data.type === 'dm') {
-                     const targetConn = connections.find(c => c.peer === data.targetId);
-                     if(targetConn) targetConn.send(data);
+                      const targetConn = connections.find(c => c.peer === data.targetId);
+                      if(targetConn) targetConn.send(data);
                 } else {
                     broadcast(data);
                 }
@@ -648,7 +678,7 @@ const LEET_MAP = {
             if(isNewMessage(data.id)) processIncomingData(data);
             dispatch(data);
         }
-        msgInput.value = '';
+        input.value = '';
     }
 
     function handleFileUpload(input) {
@@ -754,73 +784,83 @@ const LEET_MAP = {
                     }
                 }
             } else {
-                const msgChannel = msg.channel || 'general';
-                if(msg.type !== 'dm' && msgChannel === currentChannel) {
-                    renderMessage(msg);
+                if(msg.channel === currentChannel || (!msg.channel && currentChannel === 'general')) {
+                    if(msg.type !== 'dm') renderMessage(msg);
                 }
             }
         });
+        
+        feed.scrollTop = feed.scrollHeight;
     }
 
     function renderMessage(data) {
         const feed = document.getElementById('chat-feed');
-        const date = new Date(data.timestamp);
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const avatar = data.pfp || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.user)}`;
-
-        let content = "";
-        if (data.type === 'image' || (data.type === 'dm' && data.fileData && !data.fileName)) { 
-             if(data.fileData) content = `<img src="${data.fileData}" class="msg-img" onclick="window.open(this.src)">`;
-             else content = "Image Error";
-        } 
-        else if (data.type === 'pdf' || (data.type === 'dm' && data.fileData && data.fileName)) {
-             content = `<a href="${data.fileData}" download="${data.fileName}" class="msg-file"><i class="fa-solid fa-file-pdf"></i> ${data.fileName}</a>`;
-        } 
-        else {
-            const tempDiv = document.createElement('div');
-            // --- FILTER APPLIED HERE ---
-            tempDiv.textContent = filterText(data.msg); 
-            content = `<div class="message-text" style="color:#dbdee1; line-height:1.4">${tempDiv.innerHTML}</div>`;
+        const div = document.createElement('div');
+        div.className = 'message';
+        
+        let content = '';
+        if(data.type === 'image' || (data.type === 'dm' && data.fileData && !data.fileData.includes('pdf'))) {
+            content = `<br><img src="${data.fileData}" class="msg-img" onclick="openImage('${data.fileData}')">`;
+        } else if (data.type === 'pdf' || (data.type === 'dm' && data.fileData && data.fileData.includes('pdf'))) {
+            content = `<br><a href="${data.fileData}" download="${data.fileName}" class="msg-file"><i class="fa-solid fa-file-pdf"></i> ${data.fileName}</a>`;
+        } else {
+            content = filterText(data.msg || "");
         }
 
-        const senderIdSafe = data.senderId ? `'${data.senderId}'` : 'undefined';
-        const userNameSafe = `'${data.user.replace(/'/g, "\\'")}'`;
+        const dateStr = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        const cleanName = filterText(data.user);
+        
+        // Handle DM Click to Reply
+        const nameClickAction = (data.senderId && data.senderId !== peer.id) 
+            ? `onclick="openDM('${data.senderId}', '${cleanName}')"` 
+            : "";
 
-        const msgHTML = `
-            <div class="message">
-                <img src="${avatar}" class="avatar">
-                <div class="message-content">
-                    <div class="message-header">
-                        <span class="username" title="Click to DM" onclick="openDM(${senderIdSafe}, ${userNameSafe})">${data.user}</span>
-                        <span class="timestamp">${timeStr}</span>
-                    </div>
-                    ${content}
+        div.innerHTML = `
+            <img src="${data.pfp}" class="avatar">
+            <div>
+                <div class="message-header">
+                    <span class="username" ${nameClickAction}>${cleanName}</span>
+                    <span class="timestamp">${dateStr}</span>
                 </div>
-            </div>`;
-
-        feed.innerHTML += msgHTML;
+                <div style="margin-top:2px;">${content}</div>
+            </div>
+        `;
+        
+        feed.appendChild(div);
         feed.scrollTop = feed.scrollHeight;
     }
 
-    const msgInput = document.getElementById('msg-input');
-    msgInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
-    function enableChat() { 
-        msgInput.disabled = false; 
-        const displayName = currentChannel === 'dm' ? `@${currentDMName}` : `#${currentChannel}`;
-        msgInput.placeholder = `Message ${displayName}`; 
+    function openImage(src) {
+        const w = window.open("");
+        w.document.write(`<img src="${src}" style="max-width:100%">`);
     }
-    function disableChat() { msgInput.disabled = true; msgInput.placeholder = "Searching for connection..."; }
-    
+
     function updateRoleDisplay(text, specialClass) {
         const badge = document.getElementById('role-badge');
         badge.innerText = text;
-        badge.className = ""; 
+        badge.className = ''; 
         if(specialClass) badge.classList.add('role-' + specialClass);
         else if(myRole === 'host') badge.classList.add('role-host');
-        else if(text.includes("Connected")) badge.classList.add('role-client');
+        else if(myRole === 'client') badge.classList.add('role-client');
         else badge.classList.add('role-offline');
     }
+
+    function enableChat() {
+        const inp = document.getElementById('msg-input');
+        inp.disabled = false;
+        inp.placeholder = `Message #${currentChannel}`;
+    }
+    
+    function disableChat() {
+        const inp = document.getElementById('msg-input');
+        inp.disabled = true;
+        inp.placeholder = "Connecting...";
+    }
+
+    // Listen for Enter
+    document.getElementById('msg-input').addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') sendMessage();
+    });
 </script>
 </body>
 </html>
