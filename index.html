@@ -8,7 +8,7 @@
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
 <style>
-:root { --bg-tertiary: #1e1f22; --bg-secondary: #2b2d31; --bg-primary: #313338; --header-primary: #f2f3f5; --header-secondary: #949ba4; --text-normal: #dbdee1; --accent: #5865f2; --input-bg: #383a40; --green: #23a559; --red: #fa777c; }
+:root { --bg-tertiary: #1e1f22; --bg-secondary: #2b2d31; --bg-primary: #313338; --header-primary: #f2f3f5; --header-secondary: #949ba4; --text-normal: #dbdee1; --accent: #5865f2; --input-bg: #383a40; --green: #23a559; --red: #fa777c; --warning-bg: rgba(250, 166, 26, 0.1); --warning-border: #faa61a; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font-family: 'gg sans', sans-serif; height: 100vh; overflow: hidden; display: flex; }
 
@@ -16,32 +16,46 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 ::-webkit-scrollbar-track { background: #2b2d31; }
 ::-webkit-scrollbar-thumb { background: #1a1b1e; border-radius: 4px; }
 
-/* Layout */
-.servers { width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; }
+/* Layout Columns */
+.servers { width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; flex-shrink: 0; }
 .server-icon { width: 48px; height: 48px; background-color: var(--bg-primary); border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.2s; color: var(--text-normal); position: relative; }
-.server-icon:hover { border-radius: 16px; background-color: var(--accent); color: white; }
-.server-icon.active { border-radius: 16px; background-color: var(--accent); color: white; }
+.server-icon:hover, .server-icon.active { border-radius: 16px; background-color: var(--accent); color: white; }
 
-.channels { width: 240px; background: var(--bg-secondary); display: flex; flex-direction: column; }
+.channels { width: 240px; background: var(--bg-secondary); display: flex; flex-direction: column; flex-shrink: 0; }
 .server-header { height: 48px; padding: 0 16px; display: flex; align-items: center; font-weight: bold; box-shadow: 0 1px 0 rgba(4,4,5,0.2); color: var(--header-primary); }
 .channel-list { padding: 8px; flex: 1; overflow-y: auto; }
 .channel-item { padding: 6px 8px; margin-bottom: 2px; border-radius: 4px; color: var(--header-secondary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .channel-item:hover { background: rgba(79, 84, 92, 0.4); color: var(--text-normal); }
 .channel-item.active { background: rgba(88, 101, 242, 0.3); color: white; }
+
+/* User Bar (Bottom Left) */
 .user-bar { background: #232428; height: 52px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
 .user-avatar-small { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; object-fit: cover; background: #555; }
 .user-info { flex: 1; font-size: 0.85rem; font-weight: bold; overflow: hidden; margin-left: 8px; }
 
-.chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); position: relative; }
-.chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 0 rgba(4,4,5,0.2); font-weight: bold; color: var(--header-primary); }
+/* Main Chat Area */
+.chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-primary); position: relative; min-width: 0; }
+.chat-header { height: 48px; padding: 0 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 0 rgba(4,4,5,0.2); font-weight: bold; color: var(--header-primary); flex-shrink: 0;}
 .header-left { display: flex; align-items: center; }
 .header-right { display: flex; align-items: center; gap: 16px; }
 
 #chat-feed { flex: 1; overflow-y: auto; padding: 16px 0; display: flex; flex-direction: column; }
 
+/* Member List (Right Sidebar) */
+.members-sidebar { width: 240px; background: var(--bg-secondary); display: flex; flex-direction: column; flex-shrink: 0; border-left: 1px solid #1e1f22; }
+.members-header { padding: 16px 16px 8px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; color: var(--header-secondary); letter-spacing: 0.5px; }
+.member-list { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+.member-card { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; cursor: pointer; opacity: 0.9; }
+.member-card:hover { background: rgba(79, 84, 92, 0.4); opacity: 1; }
+.member-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: #333; }
+.member-name { font-weight: 500; color: var(--header-primary); font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* Messages */
-.message { padding: 4px 16px; margin-top: 4px; display: flex; gap: 16px; }
+.message { padding: 4px 16px; margin-top: 4px; display: flex; gap: 16px; border-left: 2px solid transparent; }
 .message:hover { background: rgba(4, 4, 5, 0.07); }
+.message.mentioned { background: var(--warning-bg); border-left: 2px solid var(--warning-border); }
+.message.mentioned:hover { background: rgba(250, 166, 26, 0.15); }
+
 .avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; background: #555; object-fit: cover; }
 .message-header { display: flex; align-items: baseline; gap: 8px; }
 .username { font-weight: 500; color: #fff; cursor: pointer; }
@@ -72,6 +86,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
 /* Hidden Inputs */
 #pfp-upload, #file-upload { display: none; }
+
+/* Responsive */
+@media (max-width: 800px) {
+    .members-sidebar { display: none; } /* Hide members on small screens */
+}
 </style>
 </head>
 <body>
@@ -141,6 +160,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     </div>
 </main>
 
+<aside class="members-sidebar">
+    <div class="members-header">Online — <span id="online-count">1</span></div>
+    <div class="member-list" id="member-list-container">
+        </div>
+</aside>
+
 <script src="admin.js"></script>
 
 <script>
@@ -148,28 +173,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     const SHARED_SERVER_ID = "shooym-global-room-v9-chan"; 
     const STORAGE_KEY = "shooym_history_v9";
     const PFP_KEY = "shooym_pfp_v1";
-
-    // --- ADVANCED FILTRATION SYSTEM ---
-    const RAW_BAD_WORDS = ["mommy", "mommy", "mommy", "mommy", "daddy", "cunt", "penis", "nigger", "dick", "chink"];
-    const LEET_MAP = {
-      a: '[aA@4^/\\\\]', b: '[bB8|3]', c: '[cC{(<\\[]', d: '[dD|)\\>]',
-      e: '[eE3]', f: '[fFph]', g: '[gG69]', h: '[hH#\\-|]',
-      i: '[iI1!|l]', j: '[jJ]', k: '[kK|<]', l: '[lL1|!]',
-      m: '[mM\\^\\^]', n: '[nN]', o: '[oO0]', p: '[pP9]',
-      q: '[qQ9]', r: '[rR]', s: '[sS5$]', t: '[tT7+]',
-      u: '[uUvV]', v: '[vV\\\\/]', w: '[wWvvVV]', x: '[xX%*]',
-      y: '[yY]', z: '[zZ2]'
-    };
-
-    // Generate Smart Regexes
-    const SMART_FILTERS = RAW_BAD_WORDS.map(word => {
-        let pattern = "";
-        for (let char of word.toLowerCase()) {
-            const sub = LEET_MAP[char] || char;
-            pattern += sub + "+";
-        }
-        return new RegExp(pattern, "gi");
-    });
 
     // --- STATE ---
     let myName = localStorage.getItem("shooym_username");
@@ -190,9 +193,20 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     let messageHistory = [];
     let processedIds = new Set(); 
     let isMigrating = false;
-
-    // ** IMPORTANT: LOCK STATE **
     let isLocked = false; 
+
+    // --- MEMBERS & NOTIFICATIONS ---
+    let onlineUsers = []; // [{id, name, pfp}]
+    let unreadMentions = 0;
+    
+    // --- FILTRATION ---
+    const RAW_BAD_WORDS = ["mommy", "mommy", "mommy", "mommy", "daddy", "cunt", "penis", "nigger", "dick", "chink"];
+    const LEET_MAP = { a: '[aA@4^/\\\\]', b: '[bB8|3]', c: '[cC{(<\\[]', d: '[dD|)\\>]', e: '[eE3]', f: '[fFph]', g: '[gG69]', h: '[hH#\\-|]', i: '[iI1!|l]', j: '[jJ]', k: '[kK|<]', l: '[lL1|!]', m: '[mM\\^\\^]', n: '[nN]', o: '[oO0]', p: '[pP9]', q: '[qQ9]', r: '[rR]', s: '[sS5$]', t: '[tT7+]', u: '[uUvV]', v: '[vV\\\\/]', w: '[wWvvVV]', x: '[xX%*]', y: '[yY]', z: '[zZ2]' };
+    const SMART_FILTERS = RAW_BAD_WORDS.map(word => {
+        let pattern = "";
+        for (let char of word.toLowerCase()) { const sub = LEET_MAP[char] || char; pattern += sub + "+"; }
+        return new RegExp(pattern, "gi");
+    });
 
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
@@ -203,6 +217,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     updateUI();
     loadHistory(); 
     initPeer();
+    
+    // Reset notification count on click
+    window.addEventListener('click', () => {
+        unreadMentions = 0;
+        document.title = "ShooymCord";
+    });
 
     function openVoiceWindow() {
         window.open("call.html", "ShooymVoice", "width=380,height=600,menubar=no,toolbar=no,location=no");
@@ -239,42 +259,28 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function switchChannel(channelId) {
         currentChannel = channelId;
         currentDMTarget = null;
-        
         document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
         if(channelId === 'general') document.getElementById('chan-general').classList.add('active');
         if(channelId === 'cheating') document.getElementById('chan-cheating').classList.add('active');
-        
         const displayName = channelId === 'general' ? 'general' : 'cheating general';
         document.getElementById('header-symbol').innerText = '#';
         document.getElementById('header-channel-name').innerText = displayName;
-        
         updateInputState();
         reRenderAllMessages();
     }
 
     function openDM(targetId, targetName) {
-        if(!targetId || targetId === "undefined") {
-            alert("Cannot DM this user (Old message or system).");
-            return;
-        }
-        if(targetId === peer.id) {
-            alert("You cannot DM yourself.");
-            return;
-        }
-
+        if(!targetId || targetId === "undefined" || targetId === peer.id) return;
         currentChannel = 'dm';
         currentDMTarget = targetId;
         currentDMName = targetName;
-
         document.querySelectorAll('.channel-item').forEach(el => el.classList.remove('active'));
         const dmBadge = document.getElementById('chan-dm');
         dmBadge.style.display = 'flex';
         dmBadge.classList.add('active');
         document.getElementById('dm-username-display').innerText = targetName;
-
         document.getElementById('header-symbol').innerText = '@';
         document.getElementById('header-channel-name').innerText = targetName;
-        
         updateInputState();
         reRenderAllMessages();
     }
@@ -296,60 +302,77 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         updateRoleDisplay("HOST (You)");
         enableChat();
         connections = [];
+        
+        // Host adds self to list
+        onlineUsers = [{id: id, name: myName, pfp: myPfp}];
+        renderMemberList();
 
         heartbeatInterval = setInterval(() => { broadcast({ type: 'ping' }); }, 2000); 
 
         peer.on('connection', (conn) => {
             connections.push(conn);
             conn.on('open', () => {
-                // Only send history if not wiped/empty
                 if(messageHistory.length > 0) {
-                    messageHistory.forEach(msg => {
-                        if(msg.type !== 'dm') conn.send(msg);
-                    });
+                    messageHistory.forEach(msg => { if(msg.type !== 'dm') conn.send(msg); });
                 }
+                // Send current user list to new connection
+                conn.send({ type: 'user-list-update', users: onlineUsers });
             });
             conn.on('data', (data) => {
                 if(data.type === 'ping') return;
                 
-                // --- ADMIN INTERCEPTOR (HOST) ---
-                if (data.type === 'admin-cmd') {
-                    // Call the function from admin.js
-                    if (typeof handleAdminData === "function") {
-                        handleAdminData(data);
+                // --- IDENTITY HANDSHAKE ---
+                if (data.type === 'identify') {
+                    // Update user info in list
+                    const existingIdx = onlineUsers.findIndex(u => u.id === data.id);
+                    if (existingIdx > -1) {
+                        onlineUsers[existingIdx] = { id: data.id, name: data.user, pfp: data.pfp };
+                    } else {
+                        onlineUsers.push({ id: data.id, name: data.user, pfp: data.pfp });
                     }
+                    broadcastUserList(); // Sync everyone
+                    return;
+                }
+
+                // --- ADMIN INTERCEPTOR ---
+                if (data.type === 'admin-cmd') {
+                    if (typeof handleAdminData === "function") handleAdminData(data);
                     return; 
                 }
 
                 if(data.type === 'dm') {
                     if(isNewMessage(data.id)) {
                         processIncomingData(data); 
-                        
                         const targetConn = connections.find(c => c.peer === data.targetId);
                         if(targetConn) targetConn.send(data);
-
                         const senderConn = connections.find(c => c.peer === data.senderId);
                         if(senderConn && senderConn !== targetConn) senderConn.send(data);
                     }
                     return;
                 }
 
-                if(data.type === 'history-merge') {
-                    handleHistoryMerge(data.data);
-                    return;
-                }
-                if (isNewMessage(data.id)) {
-                    processIncomingData(data);
-                    broadcast(data);
-                }
+                if(data.type === 'history-merge') { handleHistoryMerge(data.data); return; }
+                if (isNewMessage(data.id)) { processIncomingData(data); broadcast(data); }
             });
-            conn.on('close', () => connections = connections.filter(c => c !== conn));
+            
+            conn.on('close', () => {
+                connections = connections.filter(c => c !== conn);
+                // Remove from user list
+                onlineUsers = onlineUsers.filter(u => u.id !== conn.peer);
+                broadcastUserList();
+            });
         });
     }
 
     function broadcast(data) {
         connections = connections.filter(c => c.open);
         connections.forEach(c => c.send(data));
+    }
+    
+    function broadcastUserList() {
+        const payload = { type: 'user-list-update', users: onlineUsers };
+        broadcast(payload);
+        renderMemberList(); // Render for host
     }
 
     // --- CLIENT LOGIC ---
@@ -369,6 +392,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             updateRoleDisplay("Connected");
             enableChat();
             
+            // SEND IDENTITY TO HOST
+            hostConn.send({ type: 'identify', id: peer.id, user: myName, pfp: myPfp });
+
             const publicHist = messageHistory.filter(m => m.type !== 'dm');
             if(publicHist.length > 0) {
                 hostConn.send({ type: 'history-merge', data: publicHist });
@@ -379,27 +405,41 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         });
 
         hostConn.on('data', (data) => {
-            if(data.type === 'ping') {
-                lastHeartbeat = Date.now();
+            if(data.type === 'ping') { lastHeartbeat = Date.now(); return; }
+            
+            if(data.type === 'user-list-update') {
+                onlineUsers = data.users;
+                renderMemberList();
                 return;
             }
-            // --- ADMIN INTERCEPTOR (CLIENT) ---
+
             if (data.type === 'admin-cmd') {
-                if (typeof handleAdminData === "function") {
-                    handleAdminData(data);
-                }
+                if (typeof handleAdminData === "function") handleAdminData(data);
                 return; 
             }
-            if (isNewMessage(data.id)) {
-                processIncomingData(data);
-            }
+            if (isNewMessage(data.id)) { processIncomingData(data); }
         });
 
-        hostConn.on('close', () => {
-            handleHostDisconnect();
-        });
-        
+        hostConn.on('close', () => { handleHostDisconnect(); });
         peer.on('error', () => handleHostDisconnect());
+    }
+
+    // --- LIST RENDERING ---
+    function renderMemberList() {
+        const container = document.getElementById('member-list-container');
+        document.getElementById('online-count').innerText = onlineUsers.length;
+        container.innerHTML = '';
+        
+        onlineUsers.forEach(u => {
+            const div = document.createElement('div');
+            div.className = 'member-card';
+            div.onclick = () => { if(u.id !== peer.id) openDM(u.id, u.name); };
+            div.innerHTML = `
+                <img src="${u.pfp}" class="member-avatar">
+                <span class="member-name">${u.name} ${u.id === peer.id ? '(You)' : ''}</span>
+            `;
+            container.appendChild(div);
+        });
     }
 
     // --- MERGE LOGIC ---
@@ -413,7 +453,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 dirty = true;
             }
         });
-
         if(dirty) {
             messageHistory.sort((a, b) => a.timestamp - b.timestamp);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
@@ -435,7 +474,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         resetHeartbeats(); 
         updateRoleDisplay("Host Dead! Migrating...", "migrating");
         disableChat();
-        
         if(peer) peer.destroy();
         setTimeout(() => { isMigrating = false; initPeer(); }, Math.random() * 2000 + 1000);
     }
@@ -455,7 +493,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     function processIncomingData(data) {
         const isOldMessage = (Date.now() - data.timestamp) > 5000;
-        
         messageHistory.push(data);
         if(messageHistory.length > 300) messageHistory.shift(); 
         localStorage.setItem(STORAGE_KEY, JSON.stringify(messageHistory));
@@ -482,9 +519,20 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 renderMessage(data);
             }
         }
+        
+        // --- NOTIFICATION LOGIC ---
+        // If message is new, I am not the sender, and it contains my name
+        if (!isOldMessage && data.senderId !== peer.id) {
+            // Check for mention
+            const regex = new RegExp("@" + myName, "i"); // Case insensitive
+            if (regex.test(data.msg)) {
+                unreadMentions++;
+                document.title = `(${unreadMentions}) ShooymCord`;
+                // Optional: Play sound here if you want
+            }
+        }
     }
 
-    // --- FILTER HELPER FUNCTION ---
     function filterText(text) {
         if(!text) return "";
         let cleanText = text;
@@ -495,14 +543,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function sendMessage() {
-        // FIX: Prevent sending if locked
         if(isLocked) return;
 
         const input = document.getElementById('msg-input');
         let text = input.value.trim();
         if (!text) return;
-        
-        // Filter locally before sending
         text = filterText(text);
 
         const data = {
@@ -519,13 +564,11 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
         if(myRole === 'host') {
             if(isNewMessage(data.id)) {
-                processIncomingData(data); // Host stores first
+                processIncomingData(data);
                 if(data.type === 'dm') {
                       const targetConn = connections.find(c => c.peer === data.targetId);
                       if(targetConn) targetConn.send(data);
-                } else {
-                    broadcast(data);
-                }
+                } else broadcast(data);
             }
         } else {
             if(isNewMessage(data.id)) processIncomingData(data);
@@ -535,9 +578,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     }
 
     function handleFileUpload(input) {
-        // FIX: Prevent upload if locked
         if(isLocked) return;
-
         const file = input.files[0];
         if (!file) return;
         if (file.size > 2000000) { alert("File too big! Limit is 2MB."); return; }
@@ -578,7 +619,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         else if (myRole === 'client' && hostConn && hostConn.open) hostConn.send(data);
     }
 
-    // --- PFP & UI ---
     function uploadPfp(input) {
         const file = input.files[0];
         if(!file) return;
@@ -588,6 +628,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             myPfp = e.target.result;
             localStorage.setItem(PFP_KEY, myPfp);
             updateUI();
+            
+            // Re-send identity to update list for everyone
+            if (myRole === 'client' && hostConn) {
+                hostConn.send({ type: 'identify', id: peer.id, user: myName, pfp: myPfp });
+            } else if (myRole === 'host') {
+                const me = onlineUsers.find(u => u.id === peer.id);
+                if(me) { me.pfp = myPfp; broadcastUserList(); }
+            }
         }
         reader.readAsDataURL(file);
     }
@@ -598,6 +646,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             myName = newName;
             localStorage.setItem("shooym_username", myName);
             updateUI();
+            
+            // Re-send identity
+            if (myRole === 'client' && hostConn) {
+                hostConn.send({ type: 'identify', id: peer.id, user: myName, pfp: myPfp });
+            } else if (myRole === 'host') {
+                const me = onlineUsers.find(u => u.id === peer.id);
+                if(me) { me.name = myName; broadcastUserList(); }
+            }
         }
     }
 
@@ -628,10 +684,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function reRenderAllMessages() {
         const feed = document.getElementById('chat-feed');
         feed.innerHTML = '';
-        
         messageHistory.forEach(msg => {
             processedIds.add(msg.id); 
-            
             if(currentChannel === 'dm') {
                 if(msg.type === 'dm') {
                     if((msg.senderId === peer.id && msg.targetId === currentDMTarget) || 
@@ -645,7 +699,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 }
             }
         });
-        
         feed.scrollTop = feed.scrollHeight;
     }
 
@@ -663,10 +716,16 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             content = filterText(data.msg || "");
         }
 
+        // --- CHECK MENTION ---
+        // If text contains @MyName, add mentioned class
+        const mentionRegex = new RegExp("@" + myName, "i");
+        if (data.msg && mentionRegex.test(data.msg)) {
+            div.classList.add('mentioned');
+        }
+
         const dateStr = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         const cleanName = filterText(data.user);
         
-        // Handle DM Click to Reply
         const nameClickAction = (data.senderId && data.senderId !== peer.id) 
             ? `onclick="openDM('${data.senderId}', '${cleanName}')"` 
             : "";
@@ -701,17 +760,13 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         else badge.classList.add('role-offline');
     }
 
-    function enableChat() {
-        updateInputState();
-    }
-    
+    function enableChat() { updateInputState(); }
     function disableChat() {
         const inp = document.getElementById('msg-input');
         inp.disabled = true;
         inp.placeholder = "Connecting...";
     }
 
-    // Listen for Enter
     document.getElementById('msg-input').addEventListener('keypress', (e) => {
         if(e.key === 'Enter') sendMessage();
     });
