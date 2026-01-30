@@ -65,12 +65,29 @@ function handleAdminData(data) {
         div.style.cssText = "color: #faa61a; text-align: center; font-size: 0.8rem; padding: 5px; background: #222; margin: 5px 0;";
         div.innerText = "☃ snowman";
         feed.appendChild(div);
-    }
-    else if (data.action === 'slowmode-off') {
-        const feed = document.getElementById('chat-feed');
-        const div = document.createElement('div');
-        div.style.cssText = "color: #23a559; text-align: center; font-size: 0.8rem; padding: 5px; background: #222; margin: 5px 0;";
-        div.innerText = "☃ 2 snowman";
-        feed.appendChild(div);
+    }else if (data.action === 'slowmode-off') {
+    const feed = document.getElementById('chat-feed');
+    const div = document.createElement('div');
+
+    div.style.cssText = `
+        color: #23a559;
+        text-align: center;
+        font-size: 0.8rem;
+        padding: 5px;
+        background: #222;
+        margin: 5px 0;
+    `;
+
+    const link = document.createElement('a');
+    link.href = "https://www.peanutbutter.com/recipe/peanut-butter-and-jelly-sandwich/";
+    link.textContent = link.href;
+    link.target = "_blank";
+    link.style.color = "#23a559";
+    link.style.textDecoration = "underline";
+
+    div.appendChild(link);
+    feed.appendChild(div);
+}
+
     }
 }
