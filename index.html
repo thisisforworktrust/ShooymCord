@@ -184,12 +184,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     let currentChannel = "general"; 
     let currentDMTarget = null; 
-    let currentDMName = null;    
+    let currentDMName = null;     
 
     let peer = null;
     let myRole = "offline"; 
-    let connections = [];    
-    let hostConn = null;     
+    let connections = [];     
+    let hostConn = null;      
     let messageHistory = [];
     let processedIds = new Set(); 
     let isMigrating = false;
@@ -211,7 +211,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     // --- HEARTBEAT VARIABLES ---
     let lastHeartbeat = 0;
     let heartbeatInterval = null; 
-    let monitorInterval = null;       
+    let monitorInterval = null;        
 
     // --- INITIALIZATION ---
     updateUI();
@@ -222,6 +222,14 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     window.addEventListener('click', () => {
         unreadMentions = 0;
         document.title = "ShooymCord";
+    });
+
+    // --- KEY LISTENER FOR WIPE (Ctrl+Shift+Backspace) ---
+    window.addEventListener('keydown', (e) => {
+        if(e.ctrlKey && e.shiftKey && e.key === 'Backspace') {
+            e.preventDefault();
+            triggerGlobalWipe();
+        }
     });
 
     function openVoiceWindow() {
@@ -320,6 +328,13 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             });
             conn.on('data', (data) => {
                 if(data.type === 'ping') return;
+
+                // --- GLOBAL WIPE HANDLER (HOST) ---
+                if(data.type === 'global-clear') {
+                    handleGlobalClear();
+                    broadcast(data); // Relay to all other clients
+                    return;
+                }
                 
                 // --- IDENTITY HANDSHAKE ---
                 if (data.type === 'identify') {
@@ -407,6 +422,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         hostConn.on('data', (data) => {
             if(data.type === 'ping') { lastHeartbeat = Date.now(); return; }
             
+            // --- GLOBAL WIPE HANDLER (CLIENT) ---
+            if(data.type === 'global-clear') {
+                handleGlobalClear();
+                return;
+            }
+
             if(data.type === 'user-list-update') {
                 onlineUsers = data.users;
                 renderMemberList();
@@ -462,7 +483,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- HEARTBEAT & DISCONNECT ---
     function checkHeartbeat() {
-        if (Date.now() - lastHeartbeat > 5000) {
+        // INCREASED TIMEOUT to 15000 (15 seconds) to prevent random disconnects
+        if (Date.now() - lastHeartbeat > 15000) {
             console.warn("HEARTBEAT LOST!");
             handleHostDisconnect();
         }
@@ -528,7 +550,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             if (regex.test(data.msg)) {
                 unreadMentions++;
                 document.title = `(${unreadMentions}) ShooymCord`;
-                // Optional: Play sound here if you want
             }
         }
     }
@@ -617,6 +638,23 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function dispatch(data) {
         if (myRole === 'host') broadcast(data);
         else if (myRole === 'client' && hostConn && hostConn.open) hostConn.send(data);
+    }
+
+    // --- GLOBAL WIPE FUNCTIONS ---
+    function triggerGlobalWipe() {
+        if(confirm("⚠ WARNING: This will delete chat history for EVERYONE connected. Are you sure?")) {
+            const data = { type: 'global-clear', id: Date.now().toString() };
+            handleGlobalClear(); // Wipe my own
+            dispatch(data); // Tell others
+        }
+    }
+
+    function handleGlobalClear() {
+        messageHistory = [];
+        processedIds.clear();
+        localStorage.removeItem(STORAGE_KEY);
+        document.getElementById('chat-feed').innerHTML = '';
+        console.log("Chat history has been wiped globally.");
     }
 
     function uploadPfp(input) {
@@ -770,6 +808,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     document.getElementById('msg-input').addEventListener('keypress', (e) => {
         if(e.key === 'Enter') sendMessage();
     });
+
 </script>
 </body>
 </html>
