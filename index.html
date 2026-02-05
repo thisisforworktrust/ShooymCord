@@ -12,9 +12,11 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font-family: 'gg sans', sans-serif; height: 100vh; overflow: hidden; display: flex; }
 
+/* Scrollbar Optimization */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: #2b2d31; }
 ::-webkit-scrollbar-thumb { background: #1a1b1e; border-radius: 4px; }
+* { scrollbar-width: thin; scrollbar-color: #1a1b1e #2b2d31; }
 
 /* Layout Columns */
 .servers { width: 72px; background: var(--bg-tertiary); display: flex; flex-direction: column; align-items: center; padding-top: 12px; gap: 8px; flex-shrink: 0; }
@@ -63,7 +65,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 .timestamp { font-size: 0.7rem; color: var(--header-secondary); }
 
 /* File Attachments */
-.msg-img { max-width: 300px; max-height: 300px; border-radius: 5px; margin-top: 5px; cursor: pointer; }
+.msg-img { max-width: 300px; max-height: 300px; border-radius: 5px; margin-top: 5px; cursor: pointer; transition: opacity 0.2s; }
+.msg-img:hover { opacity: 0.9; }
 .msg-file { background: #2b2d31; padding: 10px; border-radius: 5px; display: inline-flex; align-items: center; gap: 10px; margin-top: 5px; text-decoration: none; color: var(--accent); border: 1px solid #444; }
 .msg-file:hover { background: #333; }
 
@@ -154,7 +157,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             </label>
             <input type="file" id="file-upload" accept="image/*,application/pdf" onchange="handleFileUpload(this)">
             
-            <input type="text" id="msg-input" placeholder="Initializing..." disabled>
+            <input type="text" id="msg-input" placeholder="Initializing..." disabled onkeydown="if(event.key==='Enter') sendMessage()">
             <button onclick="clearMyHistory()" class="btn-icon" title="Wipe History"><i class="fa-solid fa-trash"></i></button>
         </div>
     </div>
@@ -165,8 +168,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     <div class="member-list" id="member-list-container">
         </div>
 </aside>
-
-<script src="admin.js"></script>
 
 <script>
     // --- CONFIGURATION ---
@@ -184,12 +185,12 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     let currentChannel = "general"; 
     let currentDMTarget = null; 
-    let currentDMName = null;     
+    let currentDMName = null;      
 
     let peer = null;
     let myRole = "offline"; 
-    let connections = [];     
-    let hostConn = null;      
+    let connections = [];      
+    let hostConn = null;       
     let messageHistory = [];
     let processedIds = new Set(); 
     let isMigrating = false;
@@ -253,6 +254,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 console.log("Host exists. Switching to Client.");
                 becomeClient();
             } else {
+                // Retry if network blip
                 setTimeout(initPeer, 3000);
             }
         });
@@ -301,6 +303,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         } else {
             inp.disabled = false;
             inp.placeholder = `Message ${currentChannel === 'dm' ? '@' + currentDMName : '#' + currentChannel}`;
+            inp.focus();
         }
     }
 
@@ -321,10 +324,10 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
             connections.push(conn);
             conn.on('open', () => {
                 if(messageHistory.length > 0) {
-                    messageHistory.forEach(msg => { if(msg.type !== 'dm') conn.send(msg); });
+                    messageHistory.forEach(msg => { if(msg.type !== 'dm') safeSend(conn, msg); });
                 }
                 // Send current user list to new connection
-                conn.send({ type: 'user-list-update', users: onlineUsers });
+                safeSend(conn, { type: 'user-list-update', users: onlineUsers });
             });
             conn.on('data', (data) => {
                 if(data.type === 'ping') return;
@@ -359,9 +362,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                     if(isNewMessage(data.id)) {
                         processIncomingData(data); 
                         const targetConn = connections.find(c => c.peer === data.targetId);
-                        if(targetConn) targetConn.send(data);
+                        if(targetConn) safeSend(targetConn, data);
                         const senderConn = connections.find(c => c.peer === data.senderId);
-                        if(senderConn && senderConn !== targetConn) senderConn.send(data);
+                        if(senderConn && senderConn !== targetConn) safeSend(senderConn, data);
                     }
                     return;
                 }
@@ -381,7 +384,15 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     function broadcast(data) {
         connections = connections.filter(c => c.open);
-        connections.forEach(c => c.send(data));
+        connections.forEach(c => safeSend(c, data));
+    }
+
+    function safeSend(conn, data) {
+        try {
+            conn.send(data);
+        } catch(e) {
+            console.error("Send failed", e);
+        }
     }
     
     function broadcastUserList() {
@@ -483,7 +494,6 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
 
     // --- HEARTBEAT & DISCONNECT ---
     function checkHeartbeat() {
-        // INCREASED TIMEOUT to 15000 (15 seconds) to prevent random disconnects
         if (Date.now() - lastHeartbeat > 15000) {
             console.warn("HEARTBEAT LOST!");
             handleHostDisconnect();
@@ -543,10 +553,8 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         }
         
         // --- NOTIFICATION LOGIC ---
-        // If message is new, I am not the sender, and it contains my name
         if (!isOldMessage && data.senderId !== peer.id) {
-            // Check for mention
-            const regex = new RegExp("@" + myName, "i"); // Case insensitive
+            const regex = new RegExp("@" + myName, "i");
             if (regex.test(data.msg)) {
                 unreadMentions++;
                 document.title = `(${unreadMentions}) ShooymCord`;
@@ -588,7 +596,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 processIncomingData(data);
                 if(data.type === 'dm') {
                       const targetConn = connections.find(c => c.peer === data.targetId);
-                      if(targetConn) targetConn.send(data);
+                      if(targetConn) safeSend(targetConn, data);
                 } else broadcast(data);
             }
         } else {
@@ -598,41 +606,76 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         input.value = '';
     }
 
+    // --- FILE UPLOAD (OPTIMIZED) ---
     function handleFileUpload(input) {
         if(isLocked) return;
         const file = input.files[0];
         if (!file) return;
-        if (file.size > 2000000) { alert("File too big! Limit is 2MB."); return; }
 
+        // Compress images, leave PDFs alone
+        if(file.type.match(/image.*/)) {
+             compressImage(file, (compressedData) => {
+                 sendFileData(compressedData, file.name, 'image');
+             });
+        } else if(file.type.includes('pdf')) {
+             if (file.size > 2000000) { alert("PDF too big! Limit is 2MB."); return; }
+             const reader = new FileReader();
+             reader.onload = (e) => sendFileData(e.target.result, file.name, 'pdf');
+             reader.readAsDataURL(file);
+        } else {
+            alert("Only Images and PDFs supported.");
+        }
+    }
+
+    // Helper to resize/compress image before sending to avoid PeerJS crash
+    function compressImage(file, callback) {
         const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = {
-                id: Date.now().toString(36) + Math.random(),
-                user: myName,
-                pfp: myPfp,
-                fileData: e.target.result,
-                fileName: file.name,
-                type: currentChannel === 'dm' ? 'dm' : (file.type.includes('pdf') ? 'pdf' : 'image'),
-                channel: currentChannel === 'dm' ? null : currentChannel,
-                targetId: currentChannel === 'dm' ? currentDMTarget : null,
-                senderId: peer.id,
-                timestamp: Date.now()
-            };
-            
-            if(myRole === 'host') {
-                if(isNewMessage(data.id)) {
-                    processIncomingData(data);
-                    if(data.type === 'dm') {
-                        const targetConn = connections.find(c => c.peer === data.targetId);
-                        if(targetConn) targetConn.send(data);
-                    } else broadcast(data);
-                }
-            } else {
-                if(isNewMessage(data.id)) processIncomingData(data);
-                dispatch(data);
-            }
-        };
         reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 800; // Resize large images
+                const scaleSize = MAX_WIDTH / img.width;
+                canvas.width = (scaleSize < 1) ? MAX_WIDTH : img.width;
+                canvas.height = (scaleSize < 1) ? img.height * scaleSize : img.height;
+                
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                // Output as JPEG with 0.7 quality
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+                callback(dataUrl);
+            };
+        };
+    }
+
+    function sendFileData(dataStr, fileName, type) {
+        const data = {
+            id: Date.now().toString(36) + Math.random(),
+            user: myName,
+            pfp: myPfp,
+            fileData: dataStr,
+            fileName: fileName,
+            type: currentChannel === 'dm' ? 'dm' : type,
+            channel: currentChannel === 'dm' ? null : currentChannel,
+            targetId: currentChannel === 'dm' ? currentDMTarget : null,
+            senderId: peer.id,
+            timestamp: Date.now()
+        };
+
+        if(myRole === 'host') {
+            if(isNewMessage(data.id)) {
+                processIncomingData(data);
+                if(data.type === 'dm') {
+                    const targetConn = connections.find(c => c.peer === data.targetId);
+                    if(targetConn) safeSend(targetConn, data);
+                } else broadcast(data);
+            }
+        } else {
+            if(isNewMessage(data.id)) processIncomingData(data);
+            dispatch(data);
+        }
     }
 
     function dispatch(data) {
@@ -660,10 +703,9 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
     function uploadPfp(input) {
         const file = input.files[0];
         if(!file) return;
-        if(file.size > 500000) { alert("PFP image too large! keep under 500kb"); return; }
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            myPfp = e.target.result;
+        
+        compressImage(file, (compressedData) => {
+            myPfp = compressedData;
             localStorage.setItem(PFP_KEY, myPfp);
             updateUI();
             
@@ -674,8 +716,7 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
                 const me = onlineUsers.find(u => u.id === peer.id);
                 if(me) { me.pfp = myPfp; broadcastUserList(); }
             }
-        }
-        reader.readAsDataURL(file);
+        });
     }
 
     function changeName() {
@@ -718,7 +759,21 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         document.getElementById('display-username').innerText = myName;
         document.getElementById('current-user-avatar').src = myPfp;
     }
+    
+    // --- UI HELPERS ---
+    function enableChat() { document.getElementById('msg-input').disabled = false; updateInputState(); }
+    function disableChat() { document.getElementById('msg-input').disabled = true; }
+    function updateRoleDisplay(text, extraClass) {
+        const b = document.getElementById('role-badge');
+        b.innerText = text;
+        b.className = '';
+        if(extraClass) b.classList.add('role-' + extraClass);
+        else if(myRole === 'host') b.classList.add('role-host');
+        else if(myRole === 'client') b.classList.add('role-client');
+        else b.classList.add('role-offline');
+    }
 
+    // --- RENDERERS ---
     function reRenderAllMessages() {
         const feed = document.getElementById('chat-feed');
         feed.innerHTML = '';
@@ -745,17 +800,24 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         const div = document.createElement('div');
         div.className = 'message';
         
-        let content = '';
-        if(data.type === 'image' || (data.type === 'dm' && data.fileData && !data.fileData.includes('pdf'))) {
-            content = `<br><img src="${data.fileData}" class="msg-img" onclick="openImage('${data.fileData}')">`;
-        } else if (data.type === 'pdf' || (data.type === 'dm' && data.fileData && data.fileData.includes('pdf'))) {
-            content = `<br><a href="${data.fileData}" download="${data.fileName}" class="msg-file"><i class="fa-solid fa-file-pdf"></i> ${data.fileName}</a>`;
+        const divContent = document.createElement('div');
+        divContent.style.flex = "1";
+
+        let contentHTML = '';
+        
+        // Better type checking for attachments
+        const isPdf = data.fileData && data.fileData.includes('application/pdf');
+        
+        if (isPdf) {
+            contentHTML = `<br><a href="${data.fileData}" download="${data.fileName}" class="msg-file"><i class="fa-solid fa-file-pdf"></i> ${data.fileName}</a>`;
+        } else if (data.fileData) {
+            // Assume image if fileData exists and not PDF
+            contentHTML = `<br><img src="${data.fileData}" class="msg-img" onclick="openImage('${data.fileData}')">`;
         } else {
-            content = filterText(data.msg || "");
+            contentHTML = filterText(data.msg || "");
         }
 
         // --- CHECK MENTION ---
-        // If text contains @MyName, add mentioned class
         const mentionRegex = new RegExp("@" + myName, "i");
         if (data.msg && mentionRegex.test(data.msg)) {
             div.classList.add('mentioned');
@@ -764,50 +826,34 @@ body { margin: 0; background: var(--bg-primary); color: var(--text-normal); font
         const dateStr = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
         const cleanName = filterText(data.user);
         
-        const nameClickAction = (data.senderId && data.senderId !== peer.id) 
-            ? `onclick="openDM('${data.senderId}', '${cleanName}')"` 
-            : "";
-
         div.innerHTML = `
             <img src="${data.pfp}" class="avatar">
-            <div>
+            <div style="flex:1">
                 <div class="message-header">
-                    <span class="username" ${nameClickAction}>${cleanName}</span>
+                    <span class="username" onclick="openDM('${data.senderId}', '${cleanName}')">${cleanName}</span>
                     <span class="timestamp">${dateStr}</span>
                 </div>
-                <div style="margin-top:2px;">${content}</div>
+                <div>${contentHTML}</div>
             </div>
         `;
-        
+
         feed.appendChild(div);
+        
+        // Scroll fix: Wait for image to load before scrolling
+        const imgs = div.querySelectorAll('img');
+        if(imgs.length > 0) {
+            imgs.forEach(img => img.onload = () => feed.scrollTop = feed.scrollHeight);
+        }
         feed.scrollTop = feed.scrollHeight;
     }
 
+    // --- FIX: MISSING FUNCTION ---
     function openImage(src) {
         const w = window.open("");
-        w.document.write(`<img src="${src}" style="max-width:100%">`);
+        w.document.write(`<body style="margin:0;background:#111;display:flex;justify-content:center;align-items:center;height:100vh;">
+            <img src="${src}" style="max-width:100%;max-height:100%;box-shadow:0 0 20px rgba(0,0,0,0.5)">
+        </body>`);
     }
-
-    function updateRoleDisplay(text, specialClass) {
-        const badge = document.getElementById('role-badge');
-        badge.innerText = text;
-        badge.className = ''; 
-        if(specialClass) badge.classList.add('role-' + specialClass);
-        else if(myRole === 'host') badge.classList.add('role-host');
-        else if(myRole === 'client') badge.classList.add('role-client');
-        else badge.classList.add('role-offline');
-    }
-
-    function enableChat() { updateInputState(); }
-    function disableChat() {
-        const inp = document.getElementById('msg-input');
-        inp.disabled = true;
-        inp.placeholder = "Connecting...";
-    }
-
-    document.getElementById('msg-input').addEventListener('keypress', (e) => {
-        if(e.key === 'Enter') sendMessage();
-    });
 
 </script>
 </body>
